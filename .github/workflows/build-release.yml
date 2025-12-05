@@ -91,9 +91,6 @@ jobs:
       working-directory: /builder
       id: compile
       continue-on-error: true
-      env:
-        git_name: ${{ secrets.username }}
-        git_password: ${{ secrets.password }}
       run: |
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }}
         [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
