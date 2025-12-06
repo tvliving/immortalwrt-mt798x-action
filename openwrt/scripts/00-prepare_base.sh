@@ -6,6 +6,9 @@ sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
 # default LAN IP
 sed -i "s/10.0.0.1/$LAN/g" package/base-files/files/bin/config_generate
 
+# default WIFI NAME
+sed -i "s/ZeroWrt/$WIFI_NAME/g" package/mtk/applications/mtwifi-cfg/files/mtwifi.sh
+
 # default password
 if [ -n "$ROOT_PASSWORD" ]; then
     # sha256 encryption
