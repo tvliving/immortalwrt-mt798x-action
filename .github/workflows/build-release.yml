@@ -11,6 +11,7 @@ on:
         options:
           - 'cetron-ct3003'
           - 'cmcc-a10'
+          - 'umi-uax3000e'          
           - 'h3c-magic-nx30-pro'
           - 'imou-lc-hx3001'
           - 'nokia-ea0326gmp'
