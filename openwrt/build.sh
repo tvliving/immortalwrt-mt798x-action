@@ -262,10 +262,10 @@ case "$platform" in
     cetron-ct3003|cmcc-a10|umi-uax3000e|h3c-magic-nx30-pro|imou-lc-hx3001|nokia-ea0326gmp|qihoo-360t7|newland-nl-wr8103)
         curl -s "$mirror/openwrt/24-config-ax3000-common" >> .config
         ;;
-    clx-s20p|jdcloud-re-cp-03|xiaomi-redmi-router-ax6000|xiaomi-redmi-router-ax6000-512rom)
+    jdcloud-re-cp-03|xiaomi-redmi-router-ax6000|xiaomi-redmi-router-ax6000-512rom)
         curl -s "$mirror/openwrt/24-config-ax6000-common" >> .config
         ;;
-    netcore-n60-pro|netcore-n60-pro-512rom)
+    clx-s20p|netcore-n60-pro|netcore-n60-pro-512rom)
         curl -s "$mirror/openwrt/24-config-ipailna-high-power" >> .config
         ;;
 esac
