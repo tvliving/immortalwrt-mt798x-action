@@ -1,4 +1,4 @@
-name: 💻 本地固件编译
+name: ⚡ 本地编译
 
 on:
   workflow_dispatch:
