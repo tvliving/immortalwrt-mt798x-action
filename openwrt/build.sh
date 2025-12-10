@@ -343,7 +343,7 @@ case "$platform" in
     clx-s20p|netcore-n60-pro|netcore-n60-pro-512rom|all-high-power-devices)
         curl -s "$mirror/openwrt/24-config-ipailna-high-power" >> .config
         ;;
-    n60)
+    netcore-n60)
         curl -s "$mirror/openwrt/24-config-ax6000-256m-common" >> .config
         ;;        
 esac
