@@ -215,6 +215,7 @@ print_status "ENABLE_BPF"        "$ENABLE_BPF" "$GREEN_COLOR" "$RED_COLOR"
 print_status "BUILD_FAST"        "$BUILD_FAST"
 print_status "ENABLE_DOCKER"     "$ENABLE_DOCKER"
 print_status "ENABLE_SAMBA4"     "$ENABLE_SAMBA4"
+print_status "ENABLE_STORE"     "$ENABLE_STORE"
 
 # clean old files
 rm -rf openwrt
@@ -380,7 +381,10 @@ curl -s "$mirror/openwrt/24-config-general" >> .config
 
 # samba4
 [ "$ENABLE_SAMBA4" = "y" ] && curl -s $mirror/openwrt/generic/config-samba4 >> .config
-    
+
+# store
+[ "$ENABLE_STORE" = "y" ] && curl -s $mirror/openwrt/generic/config-store >> .config
+
 # Toolchain Cache
 if [ "$BUILD_FAST" = "y" ]; then
     echo -e "\n${GREEN_COLOR}Download Toolchain ...${RES}"
