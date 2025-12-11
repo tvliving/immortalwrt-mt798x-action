@@ -58,6 +58,21 @@ echo -e "msgstr \"NFtables 防火墙\"\n" >> feeds/luci/modules/luci-base/po/zh_
 echo -e "msgid \"IPtables Firewall\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
 echo -e "msgstr \"IPtables 防火墙\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
 
+echo -e "\nmsgid \"Confirm Reboot\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+echo -e "msgstr \"确认重启\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+
+echo -e "msgid \"Are you sure you want to reboot the system?\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+echo -e "msgstr \"你确认要重启系统？\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+
+echo -e "msgid \"Confirm\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+echo -e "msgstr \"确认\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+
+echo -e "msgid \"Base Setting\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+echo -e "msgstr \"基本设置\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+
+echo -e "msgid \"Use as docker root directory (/opt)\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+echo -e "msgstr \"作为 docker 根目录使用（/opt）\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+
 # profile
 sed -i 's#\\u@\\h:\\w\\\$#\\[\\e[32;1m\\][\\u@\\h\\[\\e[0m\\] \\[\\033[01;34m\\]\\W\\[\\033[00m\\]\\[\\e[32;1m\\]]\\[\\e[0m\\]\\\$#g' package/base-files/files/etc/profile
 sed -ri 's/(export PATH=")[^"]*/\1%PATH%:\/opt\/bin:\/opt\/sbin:\/opt\/usr\/bin:\/opt\/usr\/sbin/' package/base-files/files/etc/profile
