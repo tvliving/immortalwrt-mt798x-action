@@ -48,10 +48,13 @@ git clone --depth=1 https://$github/destan19/OpenAppFilter.git package/OpenAppFi
 git clone --depth=1 https://$github/QuickWrt/luci-theme-argon package/luci-theme-argon
 
 # luci-app-bandix
-git clone https://$github/timsaya/luci-app-bandix package/new/luci-app-bandix
+git clone https://$github/timsaya/luci-app-bandix package/luci-app-bandix
 
 # openwrt-bandix
-git clone https://$github/timsaya/openwrt-bandix package/new/openwrt-bandix
+git clone https://$github/timsaya/openwrt-bandix package/openwrt-bandix
+
+# package_new_istore
+git clone https://github.com/sbwml/package_new_istore package/istore
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
