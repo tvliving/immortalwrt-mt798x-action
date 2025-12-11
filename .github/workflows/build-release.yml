@@ -58,7 +58,7 @@ on:
       build_options:
         description: '🔧 构建选项（可输入多个，用空格分隔）'
         required: false
-        default: 'BUILD_FAST=y ENABLE_BPF=y ENABLE_STORE'
+        default: 'BUILD_FAST=y ENABLE_BPF=y'
         type: string
         
 jobs:
