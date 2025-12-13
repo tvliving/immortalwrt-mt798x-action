@@ -12,27 +12,6 @@
   margin: 30px 0;
 ">
 
-  <h2 style="font-size: 32px; margin-bottom: 10px;">
-    ✈️ 推荐机场：iNteS
-  </h2>
-
-  <p style="font-size: 20px; margin-top: 0;">
-    稳定高速 · 中转加速 · 流媒体解锁 · 性价比极高
-  </p>
-
-  <a href="https://inets.io/#/register?code=ZN6cU08m" target="_blank" style="
-    display: inline-block;
-    margin-top: 15px;
-    padding: 14px 28px;
-    font-size: 22px;
-    color: white;
-    background: #EF4444;
-    border-radius: 12px;
-    text-decoration: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  ">
-    👉 点击加入 iNteS（含专属优惠）
-  </a>
 
 </div>
 
