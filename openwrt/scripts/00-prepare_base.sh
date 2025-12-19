@@ -171,4 +171,4 @@ EOF
 # Custom firmware version and author metadata
 sed -i "s/DISTRIB_DESCRIPTION='*.*'/DISTRIB_DESCRIPTION='$(date +%Y%m%d)'/g"  package/base-files/files/etc/openwrt_release
 sed -i "s/DISTRIB_REVISION='*.*'/DISTRIB_REVISION=''/g" package/base-files/files/etc/openwrt_release
-sed -i "s|^OPENWRT_RELEASE=\".*\"|OPENWRT_RELEASE=\"openWrt 2410 @R$(date +%Y%m%d) \"|" package/base-files/files/usr/lib/os-release
+sed -i "s|^OPENWRT_RELEASE=\".*\"|OPENWRT_RELEASE=\"ZeroWrt 2410 @R$(date +%Y%m%d) \"|" package/base-files/files/usr/lib/os-release

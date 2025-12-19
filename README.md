@@ -81,11 +81,7 @@
 ## 近期更新 [![](https://img.shields.io/badge/-近期固件更新-FFFFFF.svg)](#近期更新-)
 🤣努力修复中……
 
-## 固件预览 [![](https://img.shields.io/badge/-固件风格预览-FFFFFF.svg)](#固件预览-)
-![star](https://cdn.jsdelivr.net/gh/OPPEN321/immortalwrt-mt798x-action/images/000.png)
-![star](https://cdn.jsdelivr.net/gh/OPPEN321/immortalwrt-mt798x-action/images/001.png)
-
-## 插件预览 [![](https://img.shields.io/badge/-插件及功能预览-FFFFFF.svg)](#插件预览-)
+## 插件预览 [![](https://img.shields.io/badge/-固件插件及功能预览-FFFFFF.svg)](#插件预览-)
 <details>
 <summary><b>LuCI 菜单概览</b></summary>
 <details>
@@ -229,12 +225,6 @@ BUILD_DOCKER=y
 ENABLE_SAMBA4=y
 ```
 
-### STORE 应用商店
-##### 只需在构建固件前在构建选项中加入该选项即可在固件中加入应用商店
-```
-ENABLE_STORE=y
-```
-
 ## 特别提示 [![](https://img.shields.io/badge/-个人免责声明-FFFFFF.svg)](#特别提示-)
 
 - **因精力有限不提供任何技术支持和教程等相关问题解答，不保证完全无 BUG！**
@@ -251,10 +241,7 @@ ENABLE_STORE=y
 | [Ophub](https://github.com/ophub) | [SuLingGG](https://github.com/SuLingGG) | [QiuSimons](https://github.com/QiuSimons) | [IvanSolis1989](https://github.com/IvanSolis1989) |
 | <img width="100" src="https://avatars.githubusercontent.com/u/68696949"/> | <img width="100" src="https://avatars.githubusercontent.com/u/22287562"/> | <img width="100" src="https://avatars.githubusercontent.com/u/45143996"/> | <img width="100" src="https://avatars.githubusercontent.com/u/44228691"/> |
 
-## ⭐ 支持项目
-**如果您喜欢这个项目，请在 GitHub 上点个 Star 支持一下！**
-<a href="#readme">
-[![Stargazers over time](https://starchart.cc/OPPEN321/immortalwrt-mt798x-action.svg?variant=adaptive)](https://starchart.cc/OPPEN321/immortalwrt-mt798x-action)
 
+<a href="#readme">
 <img src="https://img.shields.io/badge/-返回顶部-FFFFFF.svg" title="返回顶部" align="right"/>
 </a>

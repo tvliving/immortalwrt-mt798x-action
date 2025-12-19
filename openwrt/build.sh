@@ -219,27 +219,16 @@ print_status() {
 }
 [ -n "$LAN" ] && echo -e "${GREEN_COLOR}LAN:${RES} $LAN" || echo -e "${GREEN_COLOR}LAN:${RES} 10.0.0.1"
 [ -n "$ROOT_PASSWORD" ] \
-    && echo -e "${GREEN_COLOR}ROOT PASSWORD:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
-    || echo -e "${GREEN_COLOR}ROOT PASSWORD:${RES} (${YELLOW_COLOR}No password${RES})"
-[ -n "$WIFI_NAME" ] \
-    && echo -e "${GREEN_COLOR}WIFI NAME:${RES} ${BLUE_COLOR}$WIFI_NAME${RES}" \
-    || echo -e "${GREEN_COLOR}WIFI NAME:${RES} (${YELLOW_COLOR}No WIFI NAME${RES})"
-[ -n "$WIFI_PASSWORD" ] \
-    && echo -e "${GREEN_COLOR}WIFI NAME:${RES} ${BLUE_COLOR}$WIFI_PASSWORD${RES}" \
-    || echo -e "${GREEN_COLOR}WIFI NAME:${RES} (${YELLOW_COLOR}No WIFI PASSWORD${RES})"
-print_status "ENABLE_BPF"        "$ENABLE_BPF" "$GREEN_COLOR" "$RED_COLOR"
-print_status "BUILD_FAST"        "$BUILD_FAST"
-print_status "ENABLE_DOCKER"     "$ENABLE_DOCKER"
-print_status "ENABLE_SAMBA4"     "$ENABLE_SAMBA4"
-print_status "ENABLE_STORE"     "$ENABLE_STORE"
+    && echo -e "${GREEN_COLOR}Default Password:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
+    || echo -e "${GREEN_COLOR}Default Password:${RES} (${YELLOW_COLOR}No password${RES})"
 
 # clean old files
 rm -rf openwrt
 
 # openwrt - releases
 [ "$(whoami)" = "runner" ] && group "source code"
-git clone --depth=1 -b openwrt-24.10 https://$github/QuickWrt/immortalwrt-mt798x.git openwrt
-
+#git clone -b openwrt-24.10-6.6 --single-branch --filter=blob:none https://github.com/dailook/immortalwrt-mt798x-6.6.git openwrt
+git clone -b openwrt-24.10-6.6 --single-branch --filter=blob:none https://github.com/padavanonly/immortalwrt-mt798x-24.10.git openwrt
 if [ -d openwrt ]; then
     cd openwrt
     curl -Os $mirror/openwrt/patch/key.tar.gz && tar zxf key.tar.gz && rm -f key.tar.gz
@@ -409,19 +398,20 @@ curl -s "$mirror/openwrt/24-config-general" >> .config
 
 # samba4
 [ "$ENABLE_SAMBA4" = "y" ] && curl -s $mirror/openwrt/generic/config-samba4 >> .config
-
-# store
-[ "$ENABLE_STORE" = "y" ] && curl -s $mirror/openwrt/generic/config-store >> .config
-
+    
 # Toolchain Cache
-if [ "$BUILD_FAST" = "y" ]; then
+if [ "$BUILD_FAST" = "y" ] && false; then
+#if [ "$BUILD_FAST" = "y" ]; then
     echo -e "\n${GREEN_COLOR}Download Toolchain ...${RES}"
     [ -f /etc/os-release ] && source /etc/os-release
     if [ "$(whoami)" = "zhao" ]; then
         TOOLCHAIN_URL="http://127.0.0.1:8080/openwrt_caches"
     else
-        TOOLCHAIN_URL="https://github.com/QuickWrt/openwrt_caches/releases/download/openwrt-24.10"
+        TOOLCHAIN_URL="https://github.com/sbwml/openwrt_caches/releases/download/openwrt-24.10"
     fi
+#   TOOLCHAIN_URL="https://github.com/QuickWrt/openwrt_caches/releases/download/openwrt-24.10"
+
+    
     curl -L ${TOOLCHAIN_URL}/toolchain_musl_${toolchain_arch}_gcc-13.tar.zst -o toolchain.tar.zst $CURL_BAR
     echo -e "\n${GREEN_COLOR}Process Toolchain ...${RES}"
     tar -I "zstd" -xf toolchain.tar.zst
