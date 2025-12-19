@@ -103,11 +103,22 @@ jobs:
 
     - name: Install Caddy Server
       run: |
-        sudo curl -sL -o /usr/bin/caddy https://github.com/OPPEN321/caddy/releases/download/v2.10.2/caddy-amd64
-        sudo chmod 755 /usr/bin/caddy
+        echo "📥 下载 Caddy v2.10.2..."
+        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+        echo "📦 解压并安装..."
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        
+        echo "🧹 清理临时文件..."      
+        rm caddy.tar.gz
+        
+        echo "✅ 验证安装..."
+        /usr/bin/caddy version
+
+        echo "🚀 启动 Caddy 文件服务器..."
         echo ":8080 {" > caddyfile
-        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
-        echo "    file_server browse" >> caddyfile
+        echo "  root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+        echo "  file_server browse" >> caddyfile
         echo "}" >> caddyfile
         sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
 
@@ -133,19 +144,6 @@ jobs:
         cd openwrt
         tags=$(git branch --show-current)
         echo "latest_release=$tags" >>$GITHUB_ENV
-        COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")
-        echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
-        COMMIT_DATE=$(git show -s --date=short --format="时间: %ci")
-        echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
-        COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-        COMMIT_HASH=$(git show -s --date=short --format="hash: %H")
-        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
-        DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
-        echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
-        DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
-        echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
 
     - name: Extensive logs after a failed compilation
       working-directory: /builder
