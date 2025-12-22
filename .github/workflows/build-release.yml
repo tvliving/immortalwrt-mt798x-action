@@ -103,19 +103,8 @@ jobs:
 
     - name: Install Caddy Server
       run: |
-        echo "📥 下载 Caddy v2.10.2..."
-        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
-        echo "📦 解压并安装..."
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        
-        echo "🧹 清理临时文件..."      
-        rm caddy.tar.gz
-        
-        echo "✅ 验证安装..."
-        /usr/bin/caddy version
-
-        echo "🚀 启动 Caddy 文件服务器..."
+        sudo curl -sL -o /usr/bin/caddy https://github.com/alexandzors/caddy/releases/download/v2.10.2/caddy_arm64
+        sudo chmod 755 /usr/bin/caddy
         echo ":8080 {" > caddyfile
         echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
         echo "    file_server browse" >> caddyfile
@@ -183,20 +172,3 @@ jobs:
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
-        body: |
-          **This is OpenWrt Firmware for Mediatek Filogic**
-          ### 📒 固件信息
-          - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
-          - ⚽ 固件源码: https://github.com/QuickWrt/immortalwrt-mt798x
-          - 💝 源码分支: ${{ env.latest_release }}
-          - 🚀 内核版本: 6.6.95
-          - 🌐 默认地址: 10.0.0.1
-          - 🛜 默认 WIFI 名称：ZeroWrt-2.4G/ZeroWrt-5G
-          - 🆔 默认 WIFI 密码：1234567890
-          - 🔑 默认密码: password
-          ### 🧊 固件版本
-          - 固件编译前最后一次➦[主源码](https://github.com/QuickWrt/immortalwrt-mt798x)更新记录
-          - ${{ env.COMMIT_AUTHOR }}
-          - ${{ env.COMMIT_DATE }}
-          - ${{ env.COMMIT_MESSAGE }}
-          - ${{ env.COMMIT_HASH }}
