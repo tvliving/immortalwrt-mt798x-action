@@ -48,12 +48,7 @@ on:
         description: '🛜 设置默认 WIFI 名称（可选，默认ZeroWrt）'
         required: false
         default: 'ZeroWrt'
-        type: string
-      wifi_password:
-        description: '🆔 设置默认 WIFI 密码（可选，默认1234567890）'
-        required: false
-        default: '1234567890'
-        type: string          
+        type: string        
       root_password:
         description: '🔐 设置默认 root 密码（可选，默认password）'
         required: false
@@ -103,11 +98,22 @@ jobs:
 
     - name: Install Caddy Server
       run: |
-        sudo curl -sL -o /usr/bin/caddy https://github.com/alexandzors/caddy/releases/download/v2.10.2/caddy_arm64
-        sudo chmod 755 /usr/bin/caddy
+        echo "📥 下载 Caddy v2.10.2..."
+        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+        echo "📦 解压并安装..."
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        
+        echo "🧹 清理临时文件..."      
+        rm caddy.tar.gz
+        
+        echo "✅ 验证安装..."
+        /usr/bin/caddy version
+
+        echo "🚀 启动 Caddy 文件服务器..."
         echo ":8080 {" > caddyfile
-        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
-        echo "    file_server browse" >> caddyfile
+        echo "  root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+        echo "  file_server browse" >> caddyfile
         echo "}" >> caddyfile
         sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
 
@@ -127,7 +133,7 @@ jobs:
       id: compile
       continue-on-error: true
       run: |
-        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} WIFI_NAME=${{ github.event.inputs.wifi_name }} WIFI_PASSWORD=${{ github.event.inputs.wifi_password }}
+        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} WIFI_NAME=${{ github.event.inputs.wifi_name }}
         [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ github.event.inputs.device }}
         cd openwrt
@@ -145,15 +151,19 @@ jobs:
       working-directory: /builder
       run: |
         mkdir -p rom
-        case "${{ github.event.inputs.device }}" in
-          abt-asr3000|cetron-ct3003|cmcc-a10|cmcc-rax3000m-emmc|cmcc-rax3000m|cmcc-rax3000me|cmcc-xr30|\
-          cmcc-xr30-emmc|h3c-magic-nx30-pro|imou-lc-hx3001|nokia-ea0326gmp|philips-hy3000|qihoo-360t7|sl-3000|\
-          sl-3000-emmc|newland-nl-wr8103|umi-uax3000e|xiaomi-mi-router-ax3000t|clx-s20p|netcore-n60|\
-          netcore-n60-pro|netcore-n60-pro-512rom|xiaomi-redmi-router-ax6000|xiaomi-redmi-router-ax6000-512rom|\
-          ikuai-q6000|ikuai-q6000-emmc|jdcloud-re-cp-03|all-mt7981-devices|all-mt7986-devices|all-high-power-devices)
-              cp -a openwrt/bin/targets/mediatek/*/*-sysupgrade.bin rom/
-              ;;
-        esac
+        
+        # 自动查找并复制所有 sysupgrade 固件
+        find openwrt/bin/targets -name "*sysupgrade.bin" -type f -exec cp -v {} rom/ \;
+        
+        # 验证
+        if [ ! -f rom/*-sysupgrade.bin ]; then
+          echo "❌ 固件复制失败，实际文件结构："
+          find openwrt/bin -type f -name "*.bin"
+          exit 1
+        fi
+        
+        echo "✅ 成功复制固件："
+        ls -lh rom/
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
