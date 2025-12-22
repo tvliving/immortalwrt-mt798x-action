@@ -219,8 +219,18 @@ print_status() {
 }
 [ -n "$LAN" ] && echo -e "${GREEN_COLOR}LAN:${RES} $LAN" || echo -e "${GREEN_COLOR}LAN:${RES} 10.0.0.1"
 [ -n "$ROOT_PASSWORD" ] \
-    && echo -e "${GREEN_COLOR}Default Password:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
-    || echo -e "${GREEN_COLOR}Default Password:${RES} (${YELLOW_COLOR}No password${RES})"
+    && echo -e "${GREEN_COLOR}ROOT PASSWORD:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
+    || echo -e "${GREEN_COLOR}ROOT PASSWORD:${RES} (${YELLOW_COLOR}No password${RES})"
+[ -n "$WIFI_NAME" ] \
+    && echo -e "${GREEN_COLOR}WIFI NAME:${RES} ${BLUE_COLOR}$WIFI_NAME${RES}" \
+    || echo -e "${GREEN_COLOR}WIFI NAME:${RES} (${YELLOW_COLOR}No WIFI NAME${RES})"
+[ -n "$WIFI_PASSWORD" ] \
+    && echo -e "${GREEN_COLOR}WIFI NAME:${RES} ${BLUE_COLOR}$WIFI_PASSWORD${RES}" \
+    || echo -e "${GREEN_COLOR}WIFI NAME:${RES} (${YELLOW_COLOR}No WIFI PASSWORD${RES})"
+print_status "ENABLE_BPF"        "$ENABLE_BPF" "$GREEN_COLOR" "$RED_COLOR"
+print_status "BUILD_FAST"        "$BUILD_FAST"
+print_status "ENABLE_DOCKER"     "$ENABLE_DOCKER"
+print_status "ENABLE_SAMBA4"     "$ENABLE_SAMBA4"
 
 # clean old files
 rm -rf openwrt
