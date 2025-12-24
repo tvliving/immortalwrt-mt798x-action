@@ -113,49 +113,36 @@ jobs:
           uname -a
           echo
 
-      - name: 🚀 安装Caddy Server
-        id: install-caddy
-        run: |
-          echo "📥 下载 Caddy v2.10.2..."
-          sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
-          echo "📦 解压并安装..."
-          # 【关键修复2】删除重复的解压命令
-          sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-          
-          echo "🧹 清理临时文件..."      
-          rm caddy.tar.gz
-          
-          echo "✅ 验证安装..."
-          /usr/bin/caddy version
+      - name: Install Caddy Server
+    run: |
+        echo "📥 下载 Caddy v2.10.2..."
+        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+        echo "📦 解压并安装..."
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        
+        echo "🧹 清理临时文件..."      
+        rm caddy.tar.gz
+        
+        echo "✅ 验证安装..."
+        /usr/bin/caddy version
 
-          echo "🚀 启动 Caddy 文件服务器..."
-          echo ":8080 {" > caddyfile
-          echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
-          echo "    file_server browse" >> caddyfile
-          echo "}" >> caddyfile
-          sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
-          # 【新增】验证Caddy启动状态，避免后续脚本访问失败
-          sleep 3
-          if ! /usr/bin/caddy status; then
-            echo "❌ Caddy启动失败，终止流程"
-            exit 1
-          fi
+        echo "🚀 启动 Caddy 文件服务器..."
+        echo ":8080 {" > caddyfile
+        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+        echo "    file_server browse" >> caddyfile
+        echo "}" >> caddyfile
+        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
 
-      - name: 🧹 释放磁盘空间
-        id: free-disk
-        uses: sbwml/actions@free-disk
-        with:
-          build-mount-path: /builder
-
-      - name: 🛠️ 配置编译环境
+        - name: 🛠️ 配置编译环境
         id: build-setup
         uses: sbwml/actions@openwrt-build-setup
 
-      - name: 📦 安装LLVM/Clang
+        - name: 📦 安装LLVM/Clang
         id: install-llvm
         uses: sbwml/actions@install-llvm
 
-      - name: 🔨 编译OpenWrt固件
+        - name: 🔨 编译OpenWrt固件
         id: compile-firmware
         working-directory: /builder
         run: |
@@ -184,7 +171,7 @@ jobs:
           latest_release=$(git branch --show-current 2>/dev/null || echo "mt798x-$(date +%Y%m%d)")
           echo "latest_release=$latest_release" >> $GITHUB_ENV
 
-      - name: 📤 整理固件文件
+        - name: 📤 整理固件文件
         id: collect-firmware
         working-directory: /builder
         run: |
@@ -216,7 +203,7 @@ jobs:
           echo "✅ 成功找到 $firmware_count 个固件文件："
           ls -lh rom/
 
-      - name: 📤 上传固件到Artifacts
+        - name: 📤 上传固件到Artifacts
         id: upload-artifact
         uses: actions/upload-artifact@v4
         with:
@@ -224,7 +211,7 @@ jobs:
           path: ${{ env.build_dir }}/rom/*
           retention-days: 7
 
-      - name: 🚀 创建GitHub Release
+        - name: 🚀 创建GitHub Release
         id: create-release
         uses: softprops/action-gh-release@v2
         with:
