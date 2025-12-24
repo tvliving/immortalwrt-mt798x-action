@@ -1,0 +1,188 @@
+name: 💻 固件编译
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '➡️ 选择需构建固件的设备型号'
+        required: true
+        default: 'netcore-n60-pro'
+        type: choice
+        options:
+          - 'abt-asr3000'
+          - 'cetron-ct3003'
+          - 'cmcc-a10'
+          - 'cmcc-rax3000m-emmc'
+          - 'cmcc-rax3000m'
+          - 'cmcc-rax3000me'
+          - 'cmcc-xr30'
+          - 'cmcc-xr30-emmc'          
+          - 'umi-uax3000e'          
+          - 'h3c-magic-nx30-pro'
+          - 'imou-lc-hx3001'
+          - 'nokia-ea0326gmp'
+          - 'newland-nl-wr8103'
+          - 'philips-hy3000'
+          - 'qihoo-360t7'
+          - 'sl-3000'
+          - 'sl-3000-emmc'
+          - 'xiaomi-mi-router-ax3000t'         
+          - 'clx-s20p'
+          - 'ikuai-q6000'
+          - 'ikuai-q6000-emmc'
+          - 'netcore-n60'
+          - 'netcore-n60-pro'
+          - 'netcore-n60-pro-512rom'
+          - 'xiaomi-redmi-router-ax6000'
+          - 'xiaomi-redmi-router-ax6000-512rom'
+          - 'jdcloud-re-cp-03'
+          - 'all-mt7981-devices'
+          - 'all-mt7986-devices'
+          - 'all-high-power-devices'
+      lan_addr:
+        description: '🌐 设置默认 LAN IP 地址'
+        required: true
+        default: '10.0.0.1'
+        type: string
+      wifi_name:
+        description: '🛜 设置默认 WIFI 名称（可选，默认ZeroWrt）'
+        required: false
+        default: 'ZeroWrt'
+        type: string        
+      root_password:
+        description: '🔐 设置默认 root 密码（可选，默认password）'
+        required: false
+        default: 'password'
+        type: string
+      build_options:
+        description: '🔧 构建选项（可输入多个，用空格分隔）'
+        required: false
+        default: 'BUILD_FAST=y ENABLE_BPF=y'
+        type: string
+
+jobs:
+  build:
+    name: Build ${{ github.event.inputs.device }}
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      continue-on-error: true
+      uses: actions/checkout@main
+      with:
+        path: immortalwrt-mt798x-action
+
+    - name: Setup variables
+      run: |
+        sudo timedatectl set-timezone 'Asia/Shanghai'
+        git config --global user.name 'actions'
+        git config --global user.email 'action@github.com'
+        echo build_dir="/builder" >> "$GITHUB_ENV"
+
+    - name: Show system
+      run: |
+        echo -e "\n\e[1;32mCPU:\e[0m"
+        echo "$(grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}') ($(grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}')MHz) x $(grep processor /proc/cpuinfo  | wc -l)"
+        echo -e "\n\e[1;32mMemory:\e[0m"
+        free -h
+        echo -e "\n\e[1;32mStorage:\e[0m"
+        df -Th / /mnt
+        echo -e "\n\e[1;32mSystem:\e[0m"
+        lsb_release -a
+        echo -e "\n\e[1;32mKernel:\e[0m"
+        uname -a
+        echo
+
+    - name: Install Caddy Server
+      run: |
+        echo "📥 下载 Caddy v2.10.2..."
+        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+        echo "📦 解压并安装..."
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        
+        echo "🧹 清理临时文件..."      
+        rm caddy.tar.gz
+        
+        echo "✅ 验证安装..."
+        /usr/bin/caddy version
+
+        echo "🚀 启动 Caddy 文件服务器..."
+        echo ":8080 {" > caddyfile
+        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+        echo "    file_server browse" >> caddyfile
+        echo "}" >> caddyfile
+        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+
+    - name: Free disk space
+      uses: sbwml/actions@free-disk
+      with:
+        build-mount-path: /builder
+
+    - name: Build System Setup
+      uses: sbwml/actions@openwrt-build-setup
+
+    - name: Install LLVM
+      uses: sbwml/actions@install-llvm
+
+    - name: Compile OpenWrt
+      working-directory: /builder
+      id: compile
+      continue-on-error: true
+      run: |
+        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} WIFI_NAME=${{ github.event.inputs.wifi_name }}
+        [ -n "${{ github.event.inputs.root_password }}" ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
+        bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ github.event.inputs.device }}
+        cd openwrt
+        tags=$(git branch --show-current)
+        echo "latest_release=$tags" >>$GITHUB_ENV
+
+    - name: Extensive logs after a failed compilation
+      working-directory: /builder
+      if: steps.compile.outcome == 'failure'
+      run: |
+        cd openwrt
+        make V=s
+        
+    - name: Prepare Firmware Files
+      working-directory: /builder
+      run: |
+        mkdir -p rom
+        
+        # 修复核心：兼容多种固件格式，不再仅依赖sysupgrade.bin
+        # 优先查找sysupgrade固件 → 再查找通用bin固件 → 排除bl2/uboot等临时文件
+        find openwrt/bin/targets -name "*sysupgrade*.bin" -type f -exec cp -v {} rom/ \;
+        find openwrt/bin/targets -name "*.bin" -type f \
+          -not -name "*bl2*" -not -name "*uboot*" -not -name "*dtb*" -not -name "*initramfs*" \
+          -exec cp -vn {} rom/ \;
+        
+        # 优化验证逻辑：只要rom目录有bin文件就判定成功
+        firmware_count=$(ls -1 rom/*.bin 2>/dev/null | wc -l)
+        if [ $firmware_count -eq 0 ]; then
+          echo "❌ 未找到任何可用固件，实际文件结构："
+          find openwrt/bin -type f -name "*.bin"
+          exit 1
+        fi
+        
+        echo "✅ 成功复制 $firmware_count 个固件文件："
+        ls -lh rom/
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
+        path: ${{ env.build_dir }}/rom/*
+
+    - name: Create release
+      continue-on-error: true
+      uses: ncipollo/release-action@v1
+      with:
+        name: ${{ env.latest_release }}
+        allowUpdates: true
+        tag: ${{ env.latest_release }}
+        commit: main
+        replacesArtifacts: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ${{ env.build_dir }}/rom/*
