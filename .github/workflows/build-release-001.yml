@@ -113,26 +113,33 @@ jobs:
           uname -a
           echo
 
-      - name: Install Caddy Server
-      run: |
-        echo "📥 下载 Caddy v2.10.2..."
-        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
-        echo "📦 解压并安装..."
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        
-        echo "🧹 清理临时文件..."      
-        rm caddy.tar.gz
-        
-        echo "✅ 验证安装..."
-        /usr/bin/caddy version
+      - name: 🚀 安装Caddy Server
+        id: install-caddy
+        run: |
+          echo "📥 下载 Caddy v2.10.2..."
+          sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+          echo "📦 解压并安装..."
+          # 【关键修复2】删除重复的解压命令
+          sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+          
+          echo "🧹 清理临时文件..."      
+          rm caddy.tar.gz
+          
+          echo "✅ 验证安装..."
+          /usr/bin/caddy version
 
-        echo "🚀 启动 Caddy 文件服务器..."
-        echo ":8080 {" > caddyfile
-        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
-        echo "    file_server browse" >> caddyfile
-        echo "}" >> caddyfile
-        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+          echo "🚀 启动 Caddy 文件服务器..."
+          echo ":8080 {" > caddyfile
+          echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+          echo "    file_server browse" >> caddyfile
+          echo "}" >> caddyfile
+          sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+          # 【新增】验证Caddy启动状态，避免后续脚本访问失败
+          sleep 3
+          if ! /usr/bin/caddy status; then
+            echo "❌ Caddy启动失败，终止流程"
+            exit 1
+          fi
 
       - name: 🧹 释放磁盘空间
         id: free-disk
