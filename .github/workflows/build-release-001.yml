@@ -1,4 +1,4 @@
-name: Build Firmware
+name: 💻 固件编译
 
 # 同时支持：定时触发 + 手动触发
 on:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       device:
-        description: 'Device Model'
+        description: '➡️ 选择需构建固件的设备型号'
         required: true
         default: 'netcore-n60-pro'
         type: choice
@@ -21,8 +21,8 @@ on:
           - 'cmcc-rax3000m'
           - 'cmcc-rax3000me'
           - 'cmcc-xr30'
-          - 'cmcc-xr30-emmc'
-          - 'umi-uax3000e'
+          - 'cmcc-xr30-emmc'          
+          - 'umi-uax3000e'          
           - 'h3c-magic-nx30-pro'
           - 'imou-lc-hx3001'
           - 'nokia-ea0326gmp'
@@ -31,7 +31,7 @@ on:
           - 'qihoo-360t7'
           - 'sl-3000'
           - 'sl-3000-emmc'
-          - 'xiaomi-mi-router-ax3000t'
+          - 'xiaomi-mi-router-ax3000t'         
           - 'clx-s20p'
           - 'ikuai-q6000'
           - 'ikuai-q6000-emmc'
@@ -45,69 +45,93 @@ on:
           - 'all-mt7986-devices'
           - 'all-high-power-devices'
       lan_addr:
-        description: 'LAN IP Address'
+        description: '🌐 设置默认 LAN IP 地址'
         required: true
         default: '10.0.0.1'
         type: string
       wifi_name:
-        description: 'WiFi Name'
+        description: '🛜 设置默认 WIFI 名称（可选，默认ZeroWrt）'
         required: false
         default: 'ZeroWrt'
-        type: string
+        type: string        
       root_password:
-        description: 'Root Password'
+        description: '🔐 设置默认 root 密码（可选，默认password）'
         required: false
         default: 'password'
         type: string
       build_options:
-        description: 'Build Options'
+        description: '🔧 构建选项（可输入多个，用空格分隔）'
         required: false
         default: 'BUILD_FAST=y ENABLE_BPF=y'
         type: string
 
 jobs:
   build:
+    name: Build ${{ github.event.inputs.device }}
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          path: immortalwrt-mt798x-action
-          fetch-depth: 0
+    - name: Checkout
+      continue-on-error: true
+      uses: actions/checkout@main
+      with:
+        path: immortalwrt-mt798x-action
 
-      - name: Setup Env
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "build_dir=/builder" >> $GITHUB_ENV
-          echo "firmware_dir=/builder/openwrt/bin/targets" >> $GITHUB_ENV
-          # 为定时构建设置默认参数（手动构建时会覆盖）
-          echo "DEFAULT_DEVICE=netcore-n60-pro" >> $GITHUB_ENV
-          echo "DEFAULT_LAN=10.0.0.1" >> $GITHUB_ENV
-          echo "DEFAULT_WIFI=ZeroWrt" >> $GITHUB_ENV
-          echo "DEFAULT_PW=password" >> $GITHUB_ENV
-          echo "DEFAULT_OPTIONS=BUILD_FAST=y ENABLE_BPF=y" >> $GITHUB_ENV
+    - name: Setup variables
+      run: |
+        sudo timedatectl set-timezone 'Asia/Shanghai'
+        git config --global user.name 'actions'
+        git config --global user.email 'action@github.com'
+        echo build_dir="/builder" >> "$GITHUB_ENV"
 
-      - name: Install Dependencies
-        run: |
-          sudo apt update && sudo apt install -y curl llvm clang lld flex bison
-          sudo curl -L -o /usr/bin/caddy https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64
-          sudo chmod +x /usr/bin/caddy
+    - name: Show system
+      run: |
+        echo -e "\n\e[1;32mCPU:\e[0m"
+        echo "$(grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}') ($(grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}')MHz) x $(grep processor /proc/cpuinfo  | wc -l)"
+        echo -e "\n\e[1;32mMemory:\e[0m"
+        free -h
+        echo -e "\n\e[1;32mStorage:\e[0m"
+        df -Th / /mnt
+        echo -e "\n\e[1;32mSystem:\e[0m"
+        lsb_release -a
+        echo -e "\n\e[1;32mKernel:\e[0m"
+        uname -a
+        echo
 
-      - name: Start Caddy
-        run: |
-          echo ':8080 { root * $(pwd)/immortalwrt-mt798x-action; file_server browse }' > caddyfile
-          sudo caddy start --config caddyfile
-          sleep 3
-          caddy status || exit 1
+    - name: Install Caddy Server
+      run: |
+        echo "📥 下载 Caddy v2.10.2..."
+        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+        echo "📦 解压并安装..."
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        
+        echo "🧹 清理临时文件..."      
+        rm caddy.tar.gz
+        
+        echo "✅ 验证安装..."
+        /usr/bin/caddy version
 
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          large-packages: true
+        echo "🚀 启动 Caddy 文件服务器..."
+        echo ":8080 {" > caddyfile
+        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+        echo "    file_server browse" >> caddyfile
+        echo "}" >> caddyfile
+        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
 
-      - name: Build System Setup
-        uses: sbwml/actions@openwrt-build-setup
+    - name: Free disk space
+      uses: sbwml/actions@free-disk
+      with:
+        build-mount-path: /builder
+
+    - name: Build System Setup
+      uses: sbwml/actions@openwrt-build-setup
+
+    - name: Install LLVM
+      uses: sbwml/actions@install-llvm
 
       - name: Compile Firmware
         working-directory: /builder
