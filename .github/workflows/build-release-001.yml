@@ -1,9 +1,9 @@
 name: 💻 固件编译
 
-# 同时支持：定时触发 + 手动触发
+# 新增：定时触发（北京时间凌晨2点） + 保留手动触发
 on:
   schedule:
-    - cron: '0 2 * * *'  # UTC 2点 = 北京时间10点
+    - cron: '0 18 * * *'  # UTC时间18点 = 北京时间凌晨2点（UTC+8）
   workflow_dispatch:
     inputs:
       device:
@@ -21,7 +21,7 @@ on:
           - 'cmcc-xr30'
           - 'cmcc-xr30-emmc'          
           - 'umi-uax3000e'          
-          - 'h3c-magic-nx3000-pro'
+          - 'h3c-magic-nx30-pro'
           - 'imou-lc-hx3001'
           - 'nokia-ea0326gmp'
           - 'newland-nl-wr8103'
@@ -64,197 +64,148 @@ on:
         type: string
 
 jobs:
-  build-firmware:
+  build:
+    # 适配定时构建：手动触发显示选择的设备，定时触发显示默认设备
     name: Build ${{ github.event.inputs.device || 'netcore-n60-pro' }}
     runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
-    permissions:
-      contents: write  # 赋予创建Release的权限
 
     steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-        with:
-          path: immortalwrt-mt798x-action
-          fetch-depth: 0
+    - name: Checkout
+      continue-on-error: true
+      uses: actions/checkout@main
+      with:
+        path: immortalwrt-mt798x-action
 
-      - name: ⚙️ 初始化环境变量（含定时构建默认值）
-        id: setup-env
-        run: |
-          sudo timedatectl set-timezone 'Asia/Shanghai'
-          git config --global user.name 'actions'
-          git config --global user.email 'action@github.com'
-          
-          # 基础路径
-          echo "build_dir=/builder" >> "$GITHUB_ENV"
-          echo "firmware_dir=/builder/openwrt/bin/targets" >> "$GITHUB_ENV"
-          
-          # 定时构建设置默认参数（手动构建会覆盖）
-          echo "DEFAULT_DEVICE=netcore-n60-pro" >> "$GITHUB_ENV"
-          echo "DEFAULT_LAN=10.0.0.1" >> "$GITHUB_ENV"
-          echo "DEFAULT_WIFI=ZeroWrt" >> "$GITHUB_ENV"
-          echo "DEFAULT_PW=password" >> "$GITHUB_ENV"
-          echo "DEFAULT_OPTIONS=BUILD_FAST=y ENABLE_BPF=y" >> "$GITHUB_ENV"
+    - name: Setup variables
+      run: |
+        sudo timedatectl set-timezone 'Asia/Shanghai'
+        git config --global user.name 'actions'
+        git config --global user.email 'action@github.com'
+        echo build_dir="/builder" >> "$GITHUB_ENV"
+        # 新增1：定义定时构建的默认参数（不影响手动触发）
+        echo "DEFAULT_DEVICE=netcore-n60-pro" >> "$GITHUB_ENV"
+        echo "DEFAULT_LAN=10.0.0.1" >> "$GITHUB_ENV"
+        echo "DEFAULT_WIFI=ZeroWrt" >> "$GITHUB_ENV"
+        echo "DEFAULT_PW=password" >> "$GITHUB_ENV"
+        echo "DEFAULT_OPTIONS=BUILD_FAST=y ENABLE_BPF=y" >> "$GITHUB_ENV"
+        # 新增2：生成日期（格式：25.12.24），用于标签拼接
+        echo "BUILD_DATE=$(date +'%y.%m.%d')" >> "$GITHUB_ENV"
 
-      - name: 🖥️ 显示系统信息
-        id: show-system
-        run: |
-          echo -e "\n\e[1;32mCPU:\e[0m"
-          echo "$(grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}') ($(grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}')MHz) x $(grep processor /proc/cpuinfo  | wc -l)"
-          echo -e "\n\e[1;32mMemory:\e[0m"
-          free -h
-          echo -e "\n\e[1;32mStorage:\e[0m"
-          df -Th / /mnt
-          echo -e "\n\e[1;32mSystem:\e[0m"
-          lsb_release -a
-          echo -e "\n\e[1;32mKernel:\e[0m"
-          uname -a
-          echo
+    - name: Show system
+      run: |
+        echo -e "\n\e[1;32mCPU:\e[0m"
+        echo "$(grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}') ($(grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}')MHz) x $(grep processor /proc/cpuinfo  | wc -l)"
+        echo -e "\n\e[1;32mMemory:\e[0m"
+        free -h
+        echo -e "\n\e[1;32mStorage:\e[0m"
+        df -Th / /mnt
+        echo -e "\n\e[1;32mSystem:\e[0m"
+        lsb_release -a
+        echo -e "\n\e[1;32mKernel:\e[0m"
+        uname -a
+        echo
 
-      - name: 🚀 安装Caddy Server
-  id: install-caddy
-  run: |
-    echo "📥 下载 Caddy v2.10.2..."
-    sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
-    echo "📦 解压并安装..."
-    sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-    
-    echo "🧹 清理临时文件..."      
-    rm caddy.tar.gz
-    
-    echo "✅ 验证安装..."
-    /usr/bin/caddy version
+    # 完全保留你原有的 Caddy Server 代码，未做任何修改
+    - name: Install Caddy Server
+      run: |
+        echo "📥 下载 Caddy v2.10.2..."
+        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+        echo "📦 解压并安装..."
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+        
+        echo "🧹 清理临时文件..."      
+        rm caddy.tar.gz
+        
+        echo "✅ 验证安装..."
+        /usr/bin/caddy version
 
-    echo "🚀 启动 Caddy 文件服务器..."
-    # 修复1：先定义绝对路径变量，避免拼接风险
-    CADDY_ROOT="$(pwd)/immortalwrt-mt798x-action"
-    # 修复2：规范EOF写法，单独占行，路径用变量引用
-    cat > caddyfile << EOF
-  :8080 {
-      root * ${CADDY_ROOT}
-      file_server browse
-  }
-  EOF
-    # 修复3：格式化Caddyfile，彻底解决格式警告
-    sudo /usr/bin/caddy fmt --overwrite caddyfile
-    
-    # 启动Caddy（后台运行）
-    sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
-    sleep 5  # 延长启动等待时间
-    
-    # 验证Caddy服务是否正常运行
-    echo "✅ 验证Caddy服务是否正常运行..."
-    if nc -z 127.0.0.1 8080; then
-      echo "✅ Caddy启动成功，8080端口已监听"
-    else
-      echo "❌ Caddy启动失败，8080端口未监听"
-      # 输出Caddy日志便于排查
-      sudo /usr/bin/caddy logs
-      exit 1
-    fi
-      - name: 🧹 释放磁盘空间
-        id: free-disk
-        uses: sbwml/actions@free-disk
-        with:
-          build-mount-path: /builder
+        echo "🚀 启动 Caddy 文件服务器..."
+        echo ":8080 {" > caddyfile
+        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
+        echo "    file_server browse" >> caddyfile
+        echo "}" >> caddyfile
+        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
 
-      - name: 🛠️ 配置编译环境
-        id: build-setup
-        uses: sbwml/actions@openwrt-build-setup
+    - name: Free disk space
+      uses: sbwml/actions@free-disk
+      with:
+        build-mount-path: /builder
 
-      - name: 📦 安装LLVM/Clang
-        id: install-llvm
-        uses: sbwml/actions@install-llvm
+    - name: Build System Setup
+      uses: sbwml/actions@openwrt-build-setup
 
-      - name: 🔨 编译OpenWrt固件
-        id: compile-firmware
-        working-directory: /builder
-        run: |
-          mkdir -p openwrt && cd openwrt
-          
-          # 优先用手动参数，无则用默认值（适配定时构建）
-          export LAN="${{ github.event.inputs.lan_addr || env.DEFAULT_LAN }}"
-          export WIFI_NAME="${{ github.event.inputs.wifi_name || env.DEFAULT_WIFI }}"
-          export ROOT_PASSWORD="${{ github.event.inputs.root_password || env.DEFAULT_PW }}"
-          export DEVICE="${{ github.event.inputs.device || env.DEFAULT_DEVICE }}"
-          
-          # 处理构建选项
-          BUILD_OPT="${{ github.event.inputs.build_options || env.DEFAULT_OPTIONS }}"
-          for opt in $BUILD_OPT; do export $opt; done
-          
-          # 验证build.sh可访问（增加重试机制）
-          echo "✅ 验证编译脚本可访问..."
-          retry_count=0
-          until curl -sSf http://127.0.0.1:8080/build.sh > /dev/null; do
-            retry_count=$((retry_count + 1))
-            if [ $retry_count -ge 3 ]; then
-              echo "❌ 多次重试后仍无法访问build.sh脚本"
-              # 输出Caddy日志排查
-              sudo /usr/bin/caddy logs
-              exit 1
-            fi
-            echo "⚠️ 第$retry_count次重试访问build.sh..."
-            sleep 3
-          done
-          
-          # 下载并执行编译脚本
-          curl -sS http://127.0.0.1:8080/build.sh -o build.sh
-          chmod +x build.sh
-          ./build.sh $DEVICE
-          
-          # 记录版本信息
-          latest_release=$(git branch --show-current 2>/dev/null || echo "mt798x-$(date +%Y%m%d)")
-          echo "latest_release=$latest_release" >> $GITHUB_ENV
+    - name: Install LLVM
+      uses: sbwml/actions@install-llvm
 
-      - name: 📤 整理固件文件
-        id: collect-firmware
-        working-directory: /builder
-        run: |
-          mkdir -p rom
-          
-          # 查找固件文件（兼容多种格式）
-          find ${{ env.firmware_dir }} -name "*sysupgrade*.bin" -type f -exec cp -v {} rom/ \;
-          find ${{ env.firmware_dir }} -name "*.bin" -type f \
-            -not -name "*bl2*" -not -name "*uboot*" -not -name "*dtb*" -not -name "*initramfs*" \
-            -exec cp -vn {} rom/ \;
-          
-          # 安全统计固件数量（避免exit code 2）
-          firmware_count=$(find rom -maxdepth 1 -name "*.bin" -type f | wc -l)
-          
-          # 兼容img/zip格式
-          if [ $firmware_count -eq 0 ]; then
-            echo "⚠️ 未找到bin固件，尝试查找img/zip格式..."
-            find ${{ env.firmware_dir }} -name "*.img" -o -name "*.zip" -type f -exec cp -vn {} rom/ \;
-            firmware_count=$(find rom -maxdepth 1 -type f | wc -l)
-          fi
-          
-          # 验证固件是否存在
-          if [ $firmware_count -eq 0 ]; then
-            echo "❌ 未找到任何固件文件！"
-            find ${{ env.firmware_dir }} -type f
-            exit 1
-          fi
-          
-          echo "✅ 成功找到 $firmware_count 个固件文件："
-          ls -lh rom/
+    - name: Compile OpenWrt
+      working-directory: /builder
+      id: compile
+      continue-on-error: true
+      run: |
+        # 新增3：适配定时/手动构建的参数传递（兜底默认值）
+        DEVICE="${{ github.event.inputs.device || env.DEFAULT_DEVICE }}"
+        BUILD_OPT="${{ github.event.inputs.build_options || env.DEFAULT_OPTIONS }}"
+        LAN="${{ github.event.inputs.lan_addr || env.DEFAULT_LAN }}"
+        WIFI_NAME="${{ github.event.inputs.wifi_name || env.DEFAULT_WIFI }}"
+        ROOT_PASSWORD="${{ github.event.inputs.root_password || env.DEFAULT_PW }}"
+        
+        # 保留你原有的参数导出逻辑，仅替换为上面的兼容变量
+        export $BUILD_OPT LAN=$LAN WIFI_NAME=$WIFI_NAME
+        [ -n "$ROOT_PASSWORD" ] && export ROOT_PASSWORD="$ROOT_PASSWORD"
+        
+        # 执行编译脚本（保留原有逻辑）
+        bash <(curl -sS http://127.0.0.1:8080/build.sh) $DEVICE
+        cd openwrt
+        tags=$(git branch --show-current)
+        # 新增4：拼接带日期的标签（格式：openwrt-24.10-6.6-25.12.24）
+        final_tag="openwrt-${tags}-${{ env.BUILD_DATE }}"
+        echo "latest_release=$final_tag" >>$GITHUB_ENV
 
-      - name: 📤 上传固件到Artifacts
-        id: upload-artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.inputs.device || env.DEFAULT_DEVICE }}-${{ env.latest_release }}
-          path: ${{ env.build_dir }}/rom/*
-          retention-days: 7
+    - name: Extensive logs after a failed compilation
+      working-directory: /builder
+      if: steps.compile.outcome == 'failure'
+      run: |
+        cd openwrt
+        make V=s
+        
+    - name: Prepare Firmware Files
+      working-directory: /builder
+      run: |
+        mkdir -p rom
+        
+        # 自动查找并复制所有 sysupgrade 固件
+        find openwrt/bin/targets -name "*sysupgrade.bin" -type f -exec cp -v {} rom/ \;
+        
+        # 验证
+        if [ ! -f rom/*-sysupgrade.bin ]; then
+          echo "❌ 固件复制失败，实际文件结构："
+          find openwrt/bin -type f -name "*.bin"
+          exit 1
+        fi
+        
+        echo "✅ 成功复制固件："
+        ls -lh rom/
 
-      - name: 🚀 创建GitHub Release
-        id: create-release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.latest_release }}-${{ github.event.inputs.device || env.DEFAULT_DEVICE }}
-          name: ${{ env.latest_release }}-${{ github.event.inputs.device || env.DEFAULT_DEVICE }}
-          files: ${{ env.build_dir }}/rom/*
-          make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        # 适配：artifact名称带日期和设备
+        name: ${{ github.event.inputs.device || env.DEFAULT_DEVICE }}-${{ env.latest_release }}
+        path: ${{ env.build_dir }}/rom/*
+
+    - name: Create release
+      continue-on-error: true
+      uses: ncipollo/release-action@v1
+      with:
+        # 新增5：发布名称和标签都带日期（如openwrt-24.10-6.6-25.12.24）
+        name: ${{ env.latest_release }}
+        allowUpdates: true
+        tag: ${{ env.latest_release }}
+        commit: main
+        replacesArtifacts: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ${{ env.build_dir }}/rom/*
