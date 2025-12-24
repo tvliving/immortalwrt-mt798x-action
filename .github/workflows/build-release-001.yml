@@ -1,10 +1,15 @@
-name: 固件编译
+name: Build Firmware
 
+# 同时支持：定时触发 + 手动触发
 on:
+  # 定时触发（每天凌晨2点执行，时区是UTC，对应北京时间10点）
+  schedule:
+    - cron: '0 2 * * *'
+  # 手动触发（保留原有的编译选项）
   workflow_dispatch:
     inputs:
       device:
-        description: '选择设备型号'
+        description: 'Device Model'
         required: true
         default: 'netcore-n60-pro'
         type: choice
@@ -40,22 +45,22 @@ on:
           - 'all-mt7986-devices'
           - 'all-high-power-devices'
       lan_addr:
-        description: 'LAN IP 地址'
+        description: 'LAN IP Address'
         required: true
         default: '10.0.0.1'
         type: string
       wifi_name:
-        description: 'WIFI 名称'
+        description: 'WiFi Name'
         required: false
         default: 'ZeroWrt'
         type: string
       root_password:
-        description: 'root 密码'
+        description: 'Root Password'
         required: false
         default: 'password'
         type: string
       build_options:
-        description: '构建选项'
+        description: 'Build Options'
         required: false
         default: 'BUILD_FAST=y ENABLE_BPF=y'
         type: string
@@ -63,107 +68,100 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           path: immortalwrt-mt798x-action
           fetch-depth: 0
 
-      - name: 初始化环境
+      - name: Setup Env
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
           echo "build_dir=/builder" >> $GITHUB_ENV
           echo "firmware_dir=/builder/openwrt/bin/targets" >> $GITHUB_ENV
+          # 为定时构建设置默认参数（手动构建时会覆盖）
+          echo "DEFAULT_DEVICE=netcore-n60-pro" >> $GITHUB_ENV
+          echo "DEFAULT_LAN=10.0.0.1" >> $GITHUB_ENV
+          echo "DEFAULT_WIFI=ZeroWrt" >> $GITHUB_ENV
+          echo "DEFAULT_PW=password" >> $GITHUB_ENV
+          echo "DEFAULT_OPTIONS=BUILD_FAST=y ENABLE_BPF=y" >> $GITHUB_ENV
 
-      - name: 安装依赖
+      - name: Install Dependencies
         run: |
-          sudo apt update && sudo apt install -y curl wget llvm clang lld flex bison
-          # 安装Caddy
+          sudo apt update && sudo apt install -y curl llvm clang lld flex bison
           sudo curl -L -o /usr/bin/caddy https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64
           sudo chmod +x /usr/bin/caddy
 
-      - name: 启动Caddy
+      - name: Start Caddy
         run: |
-          cat > caddyfile << EOF
-:8080 {
-    root * $(pwd)/immortalwrt-mt798x-action
-    file_server browse
-}
-EOF
+          echo ':8080 { root * $(pwd)/immortalwrt-mt798x-action; file_server browse }' > caddyfile
           sudo caddy start --config caddyfile
           sleep 3
           caddy status || exit 1
 
-      - name: 释放磁盘空间
+      - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
           large-packages: true
 
-      - name: 配置编译环境
+      - name: Build Env Setup
         uses: sbwml/openwrt-build-env@v1
         with:
           version: "ubuntu-24.04"
 
-      - name: 编译固件
-        id: compile
+      - name: Compile Firmware
         working-directory: /builder
         run: |
           mkdir -p openwrt && cd openwrt
-          # 导出参数
-          export LAN="${{ github.event.inputs.lan_addr }}"
-          export WIFI_NAME="${{ github.event.inputs.wifi_name }}"
-          export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
-          for opt in ${{ github.event.inputs.build_options }}; do export $opt; done
+          # 优先使用手动输入的参数，无则用默认值（适配定时构建）
+          export LAN="${{ github.event.inputs.lan_addr || env.DEFAULT_LAN }}"
+          export WIFI_NAME="${{ github.event.inputs.wifi_name || env.DEFAULT_WIFI }}"
+          export ROOT_PASSWORD="${{ github.event.inputs.root_password || env.DEFAULT_PW }}"
+          export DEVICE="${{ github.event.inputs.device || env.DEFAULT_DEVICE }}"
+          # 处理构建选项
+          BUILD_OPT="${{ github.event.inputs.build_options || env.DEFAULT_OPTIONS }}"
+          for opt in $BUILD_OPT; do export $opt; done
+          
           # 执行编译脚本
           curl -sS http://127.0.0.1:8080/build.sh -o build.sh
           chmod +x build.sh
-          ./build.sh ${{ github.event.inputs.device }}
+          ./build.sh $DEVICE
+          
           # 记录版本
           latest_release=$(git branch --show-current 2>/dev/null || echo "mt798x-$(date +%Y%m%d)")
           echo "latest_release=$latest_release" >> $GITHUB_ENV
 
-      - name: 编译失败日志
-        if: steps.compile.outcome == 'failure'
-        working-directory: /builder/openwrt
-        run: make V=s 2>&1 | tee compile_error.log
-
-      - name: 整理固件
+      - name: Collect Firmware
         working-directory: /builder
         run: |
           mkdir -p rom
-          # 查找固件
           find ${{ env.firmware_dir }} -name "*sysupgrade*.bin" -type f -exec cp -v {} rom/ \;
           find ${{ env.firmware_dir }} -name "*.bin" -type f -not -name "*bl2*" -not -name "*uboot*" -exec cp -vn {} rom/ \;
-          # 统计数量
           firmware_count=$(find rom -maxdepth 1 -name "*.bin" -type f | wc -l)
-          # 兼容其他格式
           if [ $firmware_count -eq 0 ]; then
             find ${{ env.firmware_dir }} -name "*.img" -o -name "*.zip" -type f -exec cp -vn {} rom/ \;
             firmware_count=$(find rom -maxdepth 1 -type f | wc -l)
           fi
-          # 验证
           if [ $firmware_count -eq 0 ]; then
-            echo "未找到固件！"
+            echo "No firmware found!"
             find ${{ env.firmware_dir }} -type f
             exit 1
           fi
           ls -lh rom/
 
-      - name: 上传固件
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.inputs.device }}-${{ env.latest_release }}
+          name: ${{ github.event.inputs.device || env.DEFAULT_DEVICE }}-${{ env.latest_release }}
           path: /builder/rom/*
           retention-days: 7
 
-      - name: 创建Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.latest_release }}-${{ github.event.inputs.device }}
+          tag_name: ${{ env.latest_release }}-${{ github.event.inputs.device || env.DEFAULT_DEVICE }}
           files: /builder/rom/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
