@@ -106,10 +106,8 @@ jobs:
           tool-cache: true
           large-packages: true
 
-      - name: Build Env Setup
-        uses: sbwml/openwrt-build-env@v1
-        with:
-          version: "ubuntu-24.04"
+      - name: Build System Setup
+        uses: sbwml/actions@openwrt-build-setup
 
       - name: Compile Firmware
         working-directory: /builder
