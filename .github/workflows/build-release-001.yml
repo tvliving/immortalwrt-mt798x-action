@@ -61,199 +61,150 @@ on:
         type: string
 
 jobs:
-  build:
+  build-firmware:
     name: Build ${{ github.event.inputs.device }}
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: bash
-
+    permissions:
+      contents: write  # 赋予Release创建权限
     steps:
-    - name: Checkout
-      continue-on-error: true
-      uses: actions/checkout@main
-      with:
-        path: immortalwrt-mt798x-action
-        fetch-depth: 0  # 确保完整克隆仓库
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          path: immortalwrt-mt798x-action
+          fetch-depth: 0
 
-    - name: Setup variables
-      run: |
-        sudo timedatectl set-timezone 'Asia/Shanghai'
-        git config --global user.name 'actions'
-        git config --global user.email 'action@github.com'
-        echo "build_dir=/builder" >> "$GITHUB_ENV"
-        # 预定义固件查找路径，避免后续重复拼接
-        echo "firmware_dir=/builder/openwrt/bin/targets" >> "$GITHUB_ENV"
+      - name: ⚙️ 初始化环境变量
+        run: |
+          sudo timedatectl set-timezone 'Asia/Shanghai'
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          echo "build_dir=/builder" >> $GITHUB_ENV
+          echo "firmware_dir=/builder/openwrt/bin/targets" >> $GITHUB_ENV
 
-    - name: Show system
-      run: |
-        echo -e "\n\e[1;32mCPU:\e[0m"
-        echo "$(grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}') ($(grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}')MHz) x $(grep processor /proc/cpuinfo  | wc -l)"
-        echo -e "\n\e[1;32mMemory:\e[0m"
-        free -h
-        echo -e "\n\e[1;32mStorage:\e[0m"
-        df -Th / /mnt
-        echo -e "\n\e[1;32mSystem:\e[0m"
-        lsb_release -a
-        echo -e "\n\e[1;32mKernel:\e[0m"
-        uname -a
-        echo
+      - name: 🖥️ 显示系统信息
+        run: |
+          echo -e "\n\e[1;32m📊 CPU 信息:\e[0m"
+          grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}'
+          echo -e "\n\e[1;32m🧠 内存信息:\e[0m"
+          free -h
+          echo -e "\n\e[1;32m💾 存储信息:\e[0m"
+          df -Th / /mnt
 
-    - name: Install Caddy Server
-      run: |
-        echo "📥 下载 Caddy v2.10.2..."
-        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
-        echo "📦 解压并安装..."
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        
-        echo "🧹 清理临时文件..."      
-        rm -f caddy.tar.gz
-        
-        echo "✅ 验证安装..."
-        /usr/bin/caddy version
-
-        echo "🚀 启动 Caddy 文件服务器..."
-        mkdir -p immortalwrt-mt798x-action  # 确保目录存在
-        cat > caddyfile << EOF
+      - name: 🚀 安装Caddy文件服务器
+        run: |
+          # 下载并安装Caddy
+          sudo curl -L -o /usr/bin/caddy https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64
+          sudo chmod +x /usr/bin/caddy
+          
+          # 配置Caddy
+          cat > caddyfile << EOF
 :8080 {
     root * $(pwd)/immortalwrt-mt798x-action
     file_server browse
 }
 EOF
-        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
-        # 验证Caddy启动
-        sleep 3
-        if ! /usr/bin/caddy status; then
-          echo "❌ Caddy启动失败"
-          exit 1
-        fi
-
-    - name: Free disk space
-      uses: sbwml/actions@free-disk
-      with:
-        build-mount-path: /builder
-
-    - name: Build System Setup
-      uses: sbwml/actions@openwrt-build-setup
-
-    - name: Install LLVM
-      uses: sbwml/actions@install-llvm
-
-    - name: 修复依赖警告（预处理feeds）
-      working-directory: /builder
-      run: |
-        # 提前创建openwrt目录，避免后续报错
-        mkdir -p /builder/openwrt
-        cd /builder/openwrt
-        # 初始化feeds配置，解决docker/libcrypt-compat等依赖警告
-        echo "src-git packages https://github.com/openwrt/packages.git" > feeds.conf.default
-        echo "src-git luci https://github.com/openwrt/luci.git" >> feeds.conf.default
-        echo "src-git routing https://github.com/openwrt/routing.git" >> feeds.conf.default
-        echo "src-git telephony https://github.com/openwrt/telephony.git" >> feeds.conf.default
-        # 更新feeds并安装，解决依赖缺失
-        ./scripts/feeds update -a || true
-        ./scripts/feeds install -a || true
-
-    - name: Compile OpenWrt
-      working-directory: /builder
-      id: compile
-      continue-on-error: false  # 编译失败直接终止，便于排查
-      run: |
-        # 导出构建参数，避免空格解析问题
-        export LAN="${{ github.event.inputs.lan_addr }}"
-        export WIFI_NAME="${{ github.event.inputs.wifi_name }}"
-        export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
-        # 解析多个构建选项
-        for opt in ${{ github.event.inputs.build_options }}; do
-          export $opt
-        done
-        
-        # 验证build.sh可访问
-        if ! curl -sSf http://127.0.0.1:8080/build.sh > /dev/null; then
-          echo "❌ 无法访问build.sh脚本，检查Caddy服务"
-          exit 1
-        fi
-        
-        # 执行编译脚本
-        bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ github.event.inputs.device }}
-        
-        # 获取编译版本标签
-        cd openwrt
-        tags=$(git branch --show-current 2>/dev/null || echo "openwrt-24.10-6.6")
-        echo "latest_release=$tags" >> "$GITHUB_ENV"
-        echo "✅ 编译完成，版本标签：$tags"
-
-    - name: Extensive logs after a failed compilation
-      working-directory: /builder
-      if: steps.compile.outcome == 'failure'
-      run: |
-        cd openwrt
-        make V=s 2>&1 | tee compile_error.log
-        # 上传错误日志便于排查
-        mkdir -p /builder/rom
-        cp compile_error.log /builder/rom/
-
-    - name: Prepare Firmware Files
-      working-directory: /builder
-      run: |
-        mkdir -p rom
-        echo "🔍 开始查找固件文件，路径：${{ env.firmware_dir }}"
-        
-        # ========== 核心修复：容错的固件查找逻辑 ==========
-        # 1. 查找sysupgrade固件（优先）
-        find "${{ env.firmware_dir }}" -name "*sysupgrade*.bin" -type f -print0 | while IFS= read -r -d '' file; do
-          echo "📤 复制sysupgrade固件：$file"
-          cp -v "$file" rom/ || true
-        done
-        
-        # 2. 查找通用bin固件（排除临时文件）
-        find "${{ env.firmware_dir }}" -name "*.bin" -type f \
-          -not -name "*bl2*" -not -name "*uboot*" -not -name "*dtb*" -not -name "*initramfs*" \
-          -not -name "*factory*" -not -name "*recovery*" -print0 | while IFS= read -r -d '' file; do
-          # 避免重复复制
-          if [ ! -f "rom/$(basename "$file")" ]; then
-            echo "📤 复制通用固件：$file"
-            cp -vn "$file" rom/ || true
-          fi
-        done
-        
-        # ========== 修复exit code 2的核心：安全统计文件数量 ==========
-        # 使用find替代ls，避免无匹配时的报错
-        firmware_count=$(find rom -maxdepth 1 -name "*.bin" -type f | wc -l)
-        
-        # 验证固件数量
-        if [ "$firmware_count" -eq 0 ]; then
-          echo "❌ 未找到任何可用固件，文件结构如下："
-          find openwrt/bin -type f -name "*.[Bb][Ii][Nn]" 2>/dev/null | sort
-          echo "⚠️ 尝试查找其他格式固件（img/zip）..."
-          # 兼容其他常见固件格式
-          find "${{ env.firmware_dir }}" -name "*.img" -o -name "*.zip" -type f -exec cp -vn {} rom/ \;
-          # 重新统计
-          firmware_count=$(find rom -maxdepth 1 -type f | wc -l)
-          if [ "$firmware_count" -eq 0 ]; then
-            echo "❌ 未找到任何固件文件，编译失败"
+          
+          # 启动Caddy
+          sudo caddy start --config caddyfile
+          sleep 3
+          if ! caddy status; then
+            echo "❌ Caddy启动失败"
             exit 1
           fi
-        fi
-        
-        echo "✅ 成功复制 $firmware_count 个固件文件："
-        ls -lh rom/ || echo "⚠️ 无法列出rom目录，但已确认有固件文件"
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
-        path: ${{ env.build_dir }}/rom/*
-        retention-days: 7  # 保留7天，避免存储占用
+      - name: 🧹 释放磁盘空间
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
 
-    - name: Create release
-      continue-on-error: true
-      uses: ncipollo/release-action@v1
-      with:
-        name: ${{ env.latest_release }}-${{ github.event.inputs.device }}
-        allowUpdates: true
-        tag: ${{ env.latest_release }}-${{ github.run_id }}  # 避免标签重复
-        commit: main
-        replacesArtifacts: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ env.build_dir }}/rom/*
+      - name: 🛠️ 配置OpenWrt编译环境
+        uses: sbwml/openwrt-build-env@v1
+        with:
+          version: "ubuntu-24.04"
+
+      - name: 📦 安装LLVM/Clang
+        run: |
+          sudo apt update
+          sudo apt install -y llvm clang lld flex bison
+
+      - name: 🔨 编译OpenWrt固件
+        id: compile
+        working-directory: /builder
+        run: |
+          # 创建编译目录
+          mkdir -p openwrt && cd openwrt
+          
+          # 导出构建参数
+          export LAN="${{ github.event.inputs.lan_addr }}"
+          export WIFI_NAME="${{ github.event.inputs.wifi_name }}"
+          export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
+          for opt in ${{ github.event.inputs.build_options }}; do export $opt; done
+          
+          # 下载并执行编译脚本
+          curl -sS http://127.0.0.1:8080/build.sh -o build.sh
+          chmod +x build.sh
+          ./build.sh ${{ github.event.inputs.device }}
+          
+          # 获取版本信息
+          latest_release=$(git branch --show-current 2>/dev/null || echo "mt798x-$(date +%Y%m%d)")
+          echo "latest_release=$latest_release" >> $GITHUB_ENV
+
+      - name: 📝 编译失败时输出详细日志
+        if: steps.compile.outcome == 'failure'
+        working-directory: /builder/openwrt
+        run: |
+          make V=s 2>&1 | tee compile_error.log
+          cp compile_error.log /builder/rom/ || true
+
+      - name: 📤 整理固件文件
+        working-directory: /builder
+        run: |
+          mkdir -p rom
+          
+          # 查找所有固件文件（兼容多种格式）
+          find ${{ env.firmware_dir }} -name "*sysupgrade*.bin" -type f -exec cp -v {} rom/ \;
+          find ${{ env.firmware_dir }} -name "*.bin" -type f \
+            -not -name "*bl2*" -not -name "*uboot*" -not -name "*dtb*" -not -name "*initramfs*" \
+            -exec cp -vn {} rom/ \;
+          
+          # 安全统计固件数量（核心修复：避免exit code 2）
+          firmware_count=$(find rom -maxdepth 1 -name "*.bin" -type f | wc -l)
+          
+          # 兼容其他固件格式
+          if [ $firmware_count -eq 0 ]; then
+            echo "⚠️ 未找到bin固件，尝试查找img/zip格式..."
+            find ${{ env.firmware_dir }} -name "*.img" -o -name "*.zip" -type f -exec cp -vn {} rom/ \;
+            firmware_count=$(find rom -maxdepth 1 -type f | wc -l)
+          fi
+          
+          # 验证固件是否存在
+          if [ $firmware_count -eq 0 ]; then
+            echo "❌ 未找到任何固件文件！"
+            find ${{ env.firmware_dir }} -type f
+            exit 1
+          fi
+          
+          echo "✅ 成功找到 $firmware_count 个固件文件："
+          ls -lh rom/
+
+      - name: 📤 上传固件到Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.device }}-${{ env.latest_release }}
+          path: /builder/rom/*
+          retention-days: 7
+
+      - name: 🚀 创建GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.latest_release }}-${{ github.event.inputs.device }}
+          name: ${{ env.latest_release }}-${{ github.event.inputs.device }}
+          files: /builder/rom/*
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
