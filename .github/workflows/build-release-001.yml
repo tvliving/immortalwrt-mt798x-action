@@ -21,7 +21,7 @@ on:
           - 'cmcc-xr30'
           - 'cmcc-xr30-emmc'          
           - 'umi-uax3000e'          
-          - 'h3c-magic-nx30-pro'
+          - 'h3c-magic-nx3000-pro'
           - 'imou-lc-hx3001'
           - 'nokia-ea0326gmp'
           - 'newland-nl-wr8103'
@@ -113,36 +113,62 @@ jobs:
           uname -a
           echo
 
-      - name: Install Caddy Server
-    run: |
-        echo "📥 下载 Caddy v2.10.2..."
-        sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
-        echo "📦 解压并安装..."
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        
-        echo "🧹 清理临时文件..."      
-        rm caddy.tar.gz
-        
-        echo "✅ 验证安装..."
-        /usr/bin/caddy version
+      - name: 🚀 安装Caddy Server
+  id: install-caddy
+  run: |
+    echo "📥 下载 Caddy v2.10.2..."
+    sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
+    echo "📦 解压并安装..."
+    sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
+    
+    echo "🧹 清理临时文件..."      
+    rm caddy.tar.gz
+    
+    echo "✅ 验证安装..."
+    /usr/bin/caddy version
 
-        echo "🚀 启动 Caddy 文件服务器..."
-        echo ":8080 {" > caddyfile
-        echo "    root * $(pwd)/immortalwrt-mt798x-action" >> caddyfile
-        echo "    file_server browse" >> caddyfile
-        echo "}" >> caddyfile
-        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+    echo "🚀 启动 Caddy 文件服务器..."
+    # 修复1：先定义绝对路径变量，避免拼接风险
+    CADDY_ROOT="$(pwd)/immortalwrt-mt798x-action"
+    # 修复2：规范EOF写法，单独占行，路径用变量引用
+    cat > caddyfile << EOF
+  :8080 {
+      root * ${CADDY_ROOT}
+      file_server browse
+  }
+  EOF
+    # 修复3：格式化Caddyfile，彻底解决格式警告
+    sudo /usr/bin/caddy fmt --overwrite caddyfile
+    
+    # 启动Caddy（后台运行）
+    sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+    sleep 5  # 延长启动等待时间
+    
+    # 验证Caddy服务是否正常运行
+    echo "✅ 验证Caddy服务是否正常运行..."
+    if nc -z 127.0.0.1 8080; then
+      echo "✅ Caddy启动成功，8080端口已监听"
+    else
+      echo "❌ Caddy启动失败，8080端口未监听"
+      # 输出Caddy日志便于排查
+      sudo /usr/bin/caddy logs
+      exit 1
+    fi
+      - name: 🧹 释放磁盘空间
+        id: free-disk
+        uses: sbwml/actions@free-disk
+        with:
+          build-mount-path: /builder
 
-        - name: 🛠️ 配置编译环境
+      - name: 🛠️ 配置编译环境
         id: build-setup
         uses: sbwml/actions@openwrt-build-setup
 
-        - name: 📦 安装LLVM/Clang
+      - name: 📦 安装LLVM/Clang
         id: install-llvm
         uses: sbwml/actions@install-llvm
 
-        - name: 🔨 编译OpenWrt固件
+      - name: 🔨 编译OpenWrt固件
         id: compile-firmware
         working-directory: /builder
         run: |
@@ -158,11 +184,22 @@ jobs:
           BUILD_OPT="${{ github.event.inputs.build_options || env.DEFAULT_OPTIONS }}"
           for opt in $BUILD_OPT; do export $opt; done
           
-          # 执行编译脚本（验证脚本可访问）
-          if ! curl -sSf http://127.0.0.1:8080/build.sh > /dev/null; then
-            echo "❌ 无法访问build.sh脚本"
-            exit 1
-          fi
+          # 验证build.sh可访问（增加重试机制）
+          echo "✅ 验证编译脚本可访问..."
+          retry_count=0
+          until curl -sSf http://127.0.0.1:8080/build.sh > /dev/null; do
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -ge 3 ]; then
+              echo "❌ 多次重试后仍无法访问build.sh脚本"
+              # 输出Caddy日志排查
+              sudo /usr/bin/caddy logs
+              exit 1
+            fi
+            echo "⚠️ 第$retry_count次重试访问build.sh..."
+            sleep 3
+          done
+          
+          # 下载并执行编译脚本
           curl -sS http://127.0.0.1:8080/build.sh -o build.sh
           chmod +x build.sh
           ./build.sh $DEVICE
@@ -171,7 +208,7 @@ jobs:
           latest_release=$(git branch --show-current 2>/dev/null || echo "mt798x-$(date +%Y%m%d)")
           echo "latest_release=$latest_release" >> $GITHUB_ENV
 
-        - name: 📤 整理固件文件
+      - name: 📤 整理固件文件
         id: collect-firmware
         working-directory: /builder
         run: |
@@ -203,7 +240,7 @@ jobs:
           echo "✅ 成功找到 $firmware_count 个固件文件："
           ls -lh rom/
 
-        - name: 📤 上传固件到Artifacts
+      - name: 📤 上传固件到Artifacts
         id: upload-artifact
         uses: actions/upload-artifact@v4
         with:
@@ -211,7 +248,7 @@ jobs:
           path: ${{ env.build_dir }}/rom/*
           retention-days: 7
 
-        - name: 🚀 创建GitHub Release
+      - name: 🚀 创建GitHub Release
         id: create-release
         uses: softprops/action-gh-release@v2
         with:
