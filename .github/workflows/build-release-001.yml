@@ -9,7 +9,7 @@ on:
       device:
         description: '➡️ 选择需构建固件的设备型号'
         required: true
-        default: 'netcore-n60-pro'
+        default: 'all-mt7981-devices'
         type: choice
         options:
           - 'abt-asr3000'
