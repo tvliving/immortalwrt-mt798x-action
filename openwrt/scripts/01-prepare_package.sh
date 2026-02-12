@@ -31,21 +31,6 @@ git clone https://$github/sbwml/v2ray-geodata package/v2ray-geodata
 git clone --depth=1 https://$github/sirpdboy/luci-app-adguardhome package/luci-app-adguardhome
 sed -i "s/\(option enabled '\)1'/\10'/" package/luci-app-adguardhome/luci-app-adguardhome/root/etc/config/AdGuardHome
 
-# 添加 iStore 源
-echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf.default
-./scripts/feeds update istore
-./scripts/feeds install -d y -p istore luci-app-store
-./scripts/feeds install -d y -p istore luci-i18n-store-zh-cn
-
-# 设默认首页为 iStore
-mkdir -p files/etc/uci-defaults
-cat > files/etc/uci-defaults/99-istore-index <<EOF
-#!/bin/sh
-uci set luci.main.index=/cgi-bin/luci/istore
-uci commit luci
-EOF
-chmod +x files/etc/uci-defaults/99-istore-index
-
 # 挂载插件
 git clone --depth=1 https://$github/sirpdboy/luci-app-partexp.git package/luci-app-partexp
 
