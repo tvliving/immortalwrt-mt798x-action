@@ -32,7 +32,6 @@ on:
           - 'ikuai-q6000-emmc'
           - 'netcore-n60'
           - 'netcore-n60-pro'
-          - 'netcore-n60-pro-512rom'
           - 'xiaomi-redmi-router-ax6000'
           - 'xiaomi-redmi-router-ax6000-512rom'
           - 'jdcloud-re-cp-03'
