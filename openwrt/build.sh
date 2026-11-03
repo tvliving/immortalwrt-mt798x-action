@@ -102,15 +102,15 @@ case "$platform" in
     cmcc-xr30)
         echo -e "${GREEN_COLOR}Model: CMCC XR30${RES}"
         model="cmcc-xr30"
-        ;;  
+        ;;
     cmcc-xr30-emmc)
         echo -e "${GREEN_COLOR}Model: CMCC XR30 EMMC${RES}"
         model="cmcc-xr30-emmc"
-        ;;  
+        ;;
     umi-uax3000e)
         echo -e "${GREEN_COLOR}Model: UMI-UAX3000E${RES}"
         model="uax3000e"
-        ;;        
+        ;;
     h3c-magic-nx30-pro)
         echo -e "${GREEN_COLOR}Model: H3C Magic NX30 Pro${RES}"
         model="nx30-pro"
@@ -126,7 +126,7 @@ case "$platform" in
     philips-hy3000)
         echo -e "${GREEN_COLOR}Model: Philips HY3000${RES}"
         model="hy3000"
-        ;;    
+        ;;
     qihoo-360t7)
         echo -e "${GREEN_COLOR}Model: 360 T7${RES}"
         model="360t7"
@@ -158,7 +158,7 @@ case "$platform" in
     ikuai-q6000-emmc)
         echo -e "${GREEN_COLOR}Model: iKuai Q6000 EMMC${RES}"
         model="ikuai-q6000-emmc"
-        ;;        
+        ;;
     netcore-n60)
         echo -e "${GREEN_COLOR}Model: Netcore N60${RES}"
         model="n60"
@@ -178,7 +178,7 @@ case "$platform" in
     xiaomi-redmi-router-ax6000-512rom)
         echo -e "${GREEN_COLOR}Model: Xiaomi-Redmi-Router-AX6000 (512MB ROM)${RES}"
         model="redmi-ax6000-512rom"
-        ;;        
+        ;;
     jdcloud-re-cp-03)
         echo -e "${GREEN_COLOR}Model: JDCloud RE-CP-03${RES}"
         model="re-cp-03"
@@ -309,10 +309,10 @@ case "$platform" in
         ;;
     cmcc-xr30)
         curl -s $mirror/openwrt/24-config-musl-xr30 > .config
-        ;;  
+        ;;
     cmcc-xr30-emmc)
         curl -s $mirror/openwrt/24-config-musl-xr30-emmc > .config
-        ;;        
+        ;;
     umi-uax3000e)
         curl -s $mirror/openwrt/24-config-musl-uax3000e > .config
         ;;
@@ -354,7 +354,7 @@ case "$platform" in
         ;;
     netcore-n60)
         curl -s $mirror/openwrt/24-config-musl-n60 > .config
-        ;;        
+        ;;
     netcore-n60-pro)
         curl -s $mirror/openwrt/24-config-musl-n60pro > .config
         ;;
@@ -394,11 +394,14 @@ case "$platform" in
         ;;
     netcore-n60)
         curl -s "$mirror/openwrt/24-config-ax6000-256m-common" >> .config
-        ;;        
+        ;;
 esac
 
 # config-general
 curl -s "$mirror/openwrt/24-config-general" >> .config
+
+# bash shell（passwd 的 root shell 已改为 /bin/bash，必须安装 bash，否则 SSH 无法登录）
+echo "CONFIG_PACKAGE_bash=y" >> .config
 
 # bpf
 [ "$ENABLE_BPF" = "y" ] && curl -s $mirror/openwrt/generic/config-bpf >> .config
@@ -408,8 +411,10 @@ curl -s "$mirror/openwrt/24-config-general" >> .config
 
 # samba4
 [ "$ENABLE_SAMBA4" = "y" ] && curl -s $mirror/openwrt/generic/config-samba4 >> .config
-    
+
 # Toolchain Cache
+# 说明：sbwml 缓存仓库已下架 gcc-13 的 cortex-a53 工具链缓存，下载/解压失败时
+# 自动回退为完整编译工具链，不再终止整个编译。
 if [ "$BUILD_FAST" = "y" ]; then
     echo -e "\n${GREEN_COLOR}Download Toolchain ...${RES}"
     [ -f /etc/os-release ] && source /etc/os-release
@@ -418,13 +423,18 @@ if [ "$BUILD_FAST" = "y" ]; then
     else
         TOOLCHAIN_URL="https://github.com/sbwml/openwrt_caches/releases/download/openwrt-24.10"
     fi
-    curl -L ${TOOLCHAIN_URL}/toolchain_musl_${toolchain_arch}_gcc-13.tar.zst -o toolchain.tar.zst $CURL_BAR
-    echo -e "\n${GREEN_COLOR}Process Toolchain ...${RES}"
-    tar -I "zstd" -xf toolchain.tar.zst
-    rm -f toolchain.tar.zst
-    mkdir bin
-    find ./staging_dir/ -name '*' -exec touch {} \; >/dev/null 2>&1
-    find ./tmp/ -name '*' -exec touch {} \; >/dev/null 2>&1
+    if curl -fsSL "${TOOLCHAIN_URL}/toolchain_musl_${toolchain_arch}_gcc-13.tar.zst" -o toolchain.tar.zst $CURL_BAR \
+       && tar -I "zstd" -xf toolchain.tar.zst; then
+        echo -e "${GREEN_COLOR}Toolchain cache OK${RES}"
+        rm -f toolchain.tar.zst
+        mkdir bin
+        find ./staging_dir/ -name '*' -exec touch {} \; >/dev/null 2>&1
+        find ./tmp/ -name '*' -exec touch {} \; >/dev/null 2>&1
+    else
+        echo -e "${YELLOW_COLOR}工具链缓存不可用（gcc-13 缓存已下架），回退为完整编译工具链，耗时会更长...${RES}"
+        rm -f toolchain.tar.zst
+        rm -rf staging_dir bin
+    fi
 fi
 
 # init openwrt config
