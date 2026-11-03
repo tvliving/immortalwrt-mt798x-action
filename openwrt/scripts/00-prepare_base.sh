@@ -7,10 +7,10 @@ sed -i 's/ci-llvm=true/ci-llvm=false/g' feeds/packages/lang/rust/Makefile
 sed -i "s/10.0.0.1/$LAN/g" package/base-files/files/bin/config_generate
 
 # default WIFI NAME
-sed -i "s/ZeroWrt/$WIFI_NAME/g" package/mtk/applications/mtwifi-cfg/files/mtwifi.sh
+[ -n "$WIFI_NAME" ] && sed -i "s/ZeroWrt/$WIFI_NAME/g" package/mtk/applications/mtwifi-cfg/files/mtwifi.sh
 
 # default WIFI PASSWORD
-sed -i "s/1234567890/$WIFI_PASSWORD/g" package/mtk/applications/mtwifi-cfg/files/mtwifi.sh
+[ -n "$WIFI_PASSWORD" ] && sed -i "s/1234567890/$WIFI_PASSWORD/g" package/mtk/applications/mtwifi-cfg/files/mtwifi.sh
 
 # default password
 if [ -n "$ROOT_PASSWORD" ]; then
@@ -20,13 +20,25 @@ if [ -n "$ROOT_PASSWORD" ]; then
 fi
 
 # Docker
-rm -rf feeds/luci/applications/luci-app-dockerman
-git clone https://$gitea/zhao/luci-app-dockerman -b nft feeds/luci/applications/luci-app-dockerman
-rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc}
-git clone https://$gitea/zhao/packages_utils_docker feeds/packages/utils/docker
-git clone https://$gitea/zhao/packages_utils_dockerd feeds/packages/utils/dockerd
-git clone https://$gitea/zhao/packages_utils_containerd feeds/packages/utils/containerd
-git clone https://$gitea/zhao/packages_utils_runc feeds/packages/utils/runc
+# 说明：原脚本强制从私有 gitea (gitea.kejizero.xyz，域名已失效) 克隆 docker 组件，
+# 导致所有编译必然失败。现改为：
+#   1) 仅在 ENABLE_DOCKER=y 时才尝试替换；
+#   2) 克隆失败时保留上游 feeds 版本，不再终止编译。
+if [ "$ENABLE_DOCKER" = "y" ]; then
+    if git clone --depth=1 https://$gitea/zhao/luci-app-dockerman -b nft /tmp/luci-app-dockerman 2>/dev/null; then
+        rm -rf feeds/luci/applications/luci-app-dockerman
+        mv /tmp/luci-app-dockerman feeds/luci/applications/luci-app-dockerman
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc}
+        git clone https://$gitea/zhao/packages_utils_docker feeds/packages/utils/docker 2>/dev/null || echo "::warning::docker 使用上游 feeds 版本"
+        git clone https://$gitea/zhao/packages_utils_dockerd feeds/packages/utils/dockerd 2>/dev/null || echo "::warning::dockerd 使用上游 feeds 版本"
+        git clone https://$gitea/zhao/packages_utils_containerd feeds/packages/utils/containerd 2>/dev/null || echo "::warning::containerd 使用上游 feeds 版本"
+        git clone https://$gitea/zhao/packages_utils_runc feeds/packages/utils/runc 2>/dev/null || echo "::warning::runc 使用上游 feeds 版本"
+    else
+        echo "::warning::私有 gitea (gitea.kejizero.xyz) 已失效，docker 组件保留上游 feeds 版本"
+    fi
+else
+    echo "ENABLE_DOCKER 未启用，跳过 docker 组件替换（使用上游 feeds 版本）"
+fi
 
 # TTYD
 sed -i 's/services/system/g' feeds/luci/applications/luci-app-ttyd/root/usr/share/luci/menu.d/luci-app-ttyd.json
@@ -59,7 +71,7 @@ echo -e "msgid \"IPtables Firewall\"" >> feeds/luci/modules/luci-base/po/zh_Hans
 echo -e "msgstr \"IPtables 防火墙\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
 
 echo -e "\nmsgid \"Confirm Reboot\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
-echo -e "msgstr \"确认重启\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
+echo -e "msgstr \"确认重启\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
 
 echo -e "msgid \"Are you sure you want to reboot the system?\"" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
 echo -e "msgstr \"你确认要重启系统？\"\n" >> feeds/luci/modules/luci-base/po/zh_Hans/base.po
@@ -112,21 +124,21 @@ function addLinks() {
         // 创建表格容器
         var table = document.createElement('div');
         table.className = 'table';
-        
+
         // 创建行
         var row = document.createElement('div');
         row.className = 'tr';
-        
+
         // 左列：帮助与反馈
         var leftCell = document.createElement('div');
         leftCell.className = 'td left';
         leftCell.style.width = '33%';
         leftCell.textContent = '帮助与反馈';
-        
+
         // 右列：三个按钮
         var rightCell = document.createElement('div');
         rightCell.className = 'td left';
-        
+
         // 创建QQ交流群按钮
         var qqLink = document.createElement('a');
         qqLink.href = 'https://qm.qq.com/q/JbBVnkjzKa';
@@ -134,7 +146,7 @@ function addLinks() {
         qqLink.className = 'cbi-button';
         qqLink.style.marginRight = '10px';
         qqLink.textContent = 'QQ交流群';
-        
+
         // 创建TG交流群按钮
         var tgLink = document.createElement('a');
         tgLink.href = 'https://t.me/kejizero';
@@ -142,19 +154,19 @@ function addLinks() {
         tgLink.className = 'cbi-button';
         tgLink.style.marginRight = '10px';
         tgLink.textContent = 'TG交流群';
-        
+
         // 创建固件地址按钮
         var firmwareLink = document.createElement('a');
         firmwareLink.href = 'https://openwrt.kejizero.online';
         firmwareLink.target = '_blank';
         firmwareLink.className = 'cbi-button';
         firmwareLink.textContent = '固件地址';
-        
+
         // 组装元素
         rightCell.appendChild(qqLink);
         rightCell.appendChild(tgLink);
         rightCell.appendChild(firmwareLink);
-        
+
         row.appendChild(leftCell);
         row.appendChild(rightCell);
         table.appendChild(row);
