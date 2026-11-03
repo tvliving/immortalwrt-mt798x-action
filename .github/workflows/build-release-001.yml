@@ -1,4 +1,4 @@
-name: 💻 固件编译
+name: 💻 固件编译new
 
 on:
   workflow_dispatch:
@@ -6,9 +6,12 @@ on:
       device:
         description: '➡️ 选择需构建固件的设备型号'
         required: true
-        default: 'netcore-n60-pro'
+        default: 'all-high-power-devices'
         type: choice
         options:
+          - 'all-high-power-devices'
+          - 'all-mt7981-devices'
+          - 'all-mt7986-devices'
           - 'abt-asr3000'
           - 'cetron-ct3003'
           - 'cmcc-a10'
@@ -35,9 +38,6 @@ on:
           - 'xiaomi-redmi-router-ax6000'
           - 'xiaomi-redmi-router-ax6000-512rom'
           - 'jdcloud-re-cp-03'
-          - 'all-mt7981-devices'
-          - 'all-mt7986-devices'
-          - 'all-high-power-devices'
       lan_addr:
         description: '🌐 设置默认 LAN IP 地址'
         required: true
@@ -85,8 +85,9 @@ jobs:
         git config --global user.name 'actions'
         git config --global user.email 'action@github.com'
         echo build_dir="/builder" >> "$GITHUB_ENV"
-        # 发布标签：机型-日期（每天每机型一个 Release，历史全保留）
+        # 发布标签：机型-日期（每个机型每天一个 Release，历史全保留）
         echo "build_date=$(TZ=Asia/Shanghai date +%Y-%m-%d)" >> "$GITHUB_ENV"
+        echo "REPO_DIR=$GITHUB_WORKSPACE/immortalwrt-mt798x-action" >> "$GITHUB_ENV"
 
     - name: Show system
       run: |
@@ -133,6 +134,104 @@ jobs:
     - name: Install LLVM
       uses: sbwml/actions@install-llvm
 
+    #===========================================================================
+    # 关键修复：全机型选项不再依赖仓库里写死的静态 .config
+    #   旧问题：24-config-musl-all-high-power-devices 里只有 3 个机型 ID，
+    #           且其中 netcore_n60-pro-512rom / clx_s20p 在源码中不存在，
+    #           kconfig 会静默丢弃不存在的 ID → 最后只编出 1 台（n60-pro）。
+    #   现在：每次运行先抓取源码 filogic.mk，用它真实注册的设备重新生成配置文件，
+    #         build.sh 随后 curl 到的就是这份正确配置（Caddy 直接服务工作目录）。
+    #===========================================================================
+    - name: 🧮 按源码生成全机型配置
+      if: startsWith(github.event.inputs.device, 'all-')
+      run: |
+        set -euo pipefail
+        SRC_BRANCH="openwrt-24.10-6.6"
+        MK_URL="https://raw.githubusercontent.com/padavanonly/immortalwrt-mt798x-6.6/${SRC_BRANCH}/target/linux/mediatek/image/filogic.mk"
+
+        echo "📥 抓取源码设备表：$MK_URL"
+        curl -fsSL --retry 3 "$MK_URL" -o /tmp/filogic.mk
+        echo "filogic.mk 大小：$(wc -c < /tmp/filogic.mk) 字节"
+
+        # 1) 源码注册的设备清单（准）：TARGET_DEVICES += xxx
+        awk '/^TARGET_DEVICES[[:space:]]*\+=/ {
+               sub(/^TARGET_DEVICES[[:space:]]*\+=/, "");
+               n = split($0, a, /[ \t]+/);
+               for (i = 1; i <= n; i++) if (a[i] != "") print a[i]
+             }' /tmp/filogic.mk \
+          | tr -d '"' | sed '/^$/d' | sort -u > /tmp/devs.txt
+
+        # 2) 兜底：若该分支没有 TARGET_DEVICES 行，则从 define Device/ 解析
+        if [ ! -s /tmp/devs.txt ]; then
+          echo "⚠️ 未找到 TARGET_DEVICES 行，回退为解析 define Device/"
+          awk '/^define Device\// { n=$2; sub(/^Device\//,"",n); sub(/[ \t]+$/,"",n); print n }' \
+            /tmp/filogic.mk | sort -u > /tmp/devs.txt
+        fi
+
+        # 3) 设备 → 芯片 映射（读 DEVICE_DTS，mt7981*/mt7986*/mt7987*/mt7988*）
+        awk '
+          /^define Device\// { n=$2; sub(/^Device\//,"",n); dts=""; inb=1; next }
+          inb && /DEVICE_DTS[ \t]*:=/ { d=$NF; gsub(/"/,"",d); if (d ~ /^mt798[0-9]/) dts=d }
+          inb && /^endef/ { if (n != "" && dts != "") print n, dts; inb=0 }
+        ' /tmp/filogic.mk > /tmp/dev_chip.txt
+
+        echo "源码注册设备总数：$(wc -l < /tmp/devs.txt)"
+        echo "可判定芯片的设备数：$(wc -l < /tmp/dev_chip.txt)"
+
+        # 生成某个平台的全机型配置
+        gen_config() {
+          local plat="$1" filter="$2"
+          local out="$REPO_DIR/openwrt/24-config-musl-${plat}"
+          local expected="$GITHUB_WORKSPACE/expected_${plat}.txt"
+          local n=0 d chip
+
+          {
+            echo "CONFIG_TARGET_mediatek=y"
+            echo "CONFIG_TARGET_mediatek_filogic=y"
+            echo "CONFIG_TARGET_MULTI_PROFILE=y"
+            echo "CONFIG_TARGET_PER_DEVICE_ROOTFS=y"
+          } > "$out"
+          : > "$expected"
+
+          while read -r d; do
+            [ -n "$d" ] || continue
+            chip=$(awk -v d="$d" '$1 == d { print $2; exit }' /tmp/dev_chip.txt)
+            if [ -z "$chip" ]; then
+              # 无法判定芯片（公共模板/未写 DTS）：只在“全部”组里保留
+              [ "$filter" = "all" ] || continue
+            else
+              case "$filter" in
+                mt7981) [[ "$chip" == mt7981* ]] || continue ;;
+                mt7986) [[ "$chip" == mt7986* ]] || continue ;;
+                mt7988) [[ "$chip" == mt7987* || "$chip" == mt7988* ]] || continue ;;
+              esac
+            fi
+            echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_${d}=y" >> "$out"
+            echo "$d" >> "$expected"
+            n=$((n + 1))
+          done < /tmp/devs.txt
+
+          echo "✅ ${plat}：生成 ${n} 台设备 → $(basename "$out")"
+          if [ "$n" -eq 0 ]; then
+            echo "::error::${plat} 一台设备都没解析到，源码格式可能变了，终止编译"
+            exit 1
+          fi
+        }
+
+        gen_config all-mt7981-devices mt7981
+        gen_config all-mt7986-devices mt7986
+        # all-high-power-devices 重新定义为“全部 MT798x 机型”（含 MT7988/MT7987）
+        gen_config all-high-power-devices all
+
+        {
+          echo "### 本次生成的机型清单"
+          for p in all-mt7981-devices all-mt7986-devices all-high-power-devices; do
+            echo "- ${p}：$(wc -l < "$GITHUB_WORKSPACE/expected_${p}.txt") 台"
+          done
+          echo ""
+          echo "选中机型：$(cat "$GITHUB_WORKSPACE/expected_${{ github.event.inputs.device }}.txt" 2>/dev/null | tr '\n' ' ')"
+        } >> "$GITHUB_STEP_SUMMARY"
+
     - name: Compile OpenWrt
       working-directory: /builder
       id: compile
@@ -153,23 +252,57 @@ jobs:
         cd openwrt
         make V=s
 
+    #===========================================================================
+    # 修复：旧脚本只 find "*sysupgrade.bin"，本源码树里大量机型（如 rax3000m 系列）
+    # 输出的是 sysupgrade.itb / factory.bin，即使编译成功也会被丢掉。
+    # 这里收集全部成品镜像格式，并核对“选中机型数 vs 实际产出机型数”。
+    #===========================================================================
     - name: Prepare Firmware Files
       working-directory: /builder
       run: |
         mkdir -p rom
 
-        # 自动查找并复制所有 sysupgrade 固件
-        find openwrt/bin/targets -name "*sysupgrade.bin" -type f -exec cp -v {} rom/ \;
+        find openwrt/bin/targets -type f \
+          \( -name "*sysupgrade.bin" -o -name "*sysupgrade.itb" \
+             -o -name "*factory.bin" -o -name "*sdcard*.img.gz" \) \
+          ! -name "*.json" -exec cp -v {} rom/ \;
 
-        # 验证
-        if [ ! -f rom/*-sysupgrade.bin ]; then
-          echo "❌ 固件复制失败，实际文件结构："
-          find openwrt/bin -type f -name "*.bin"
+        if [ -z "$(ls -A rom 2>/dev/null)" ]; then
+          echo "❌ 固件复制失败，实际产物："
+          find openwrt/bin -type f \( -name "*.bin" -o -name "*.itb" \) | head -50
           exit 1
         fi
 
         echo "✅ 成功复制固件："
-        ls -lh rom/
+        ls -lh rom/ | tail -50
+        echo "总计：$(ls rom | wc -l) 个文件"
+
+        # ---- 产出核对：选中机型 vs 实际出货机型 ----
+        EXP="$GITHUB_WORKSPACE/expected_${{ github.event.inputs.device }}.txt"
+        if [ -f "$EXP" ]; then
+          ls rom | sed -E 's/^.*-filogic-//' | sed -E 's/-(squashfs|initramfs|factory|ext4|rootfs).*$//' | sort -u > /tmp/built.txt
+          sort -u "$EXP" > /tmp/expected.txt
+          MISSING=$(comm -23 /tmp/expected.txt /tmp/built.txt)
+          echo "预期机型 $(wc -l < /tmp/expected.txt) 台 / 实际出货 $(wc -l < /tmp/built.txt) 台"
+
+          {
+            echo "### 产出核对"
+            echo "- 预期机型：$(wc -l < /tmp/expected.txt) 台"
+            echo "- 实际出货：$(wc -l < /tmp/built.txt) 台"
+            if [ -n "$MISSING" ]; then
+              echo ""
+              echo "**未产出机型（多为源码中该机型 image 规则失败或需要特殊 boot 包）**："
+              echo '```'
+              echo "$MISSING"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$MISSING" ]; then
+            echo "::warning::有 $(echo "$MISSING" | wc -l) 台机型没有产出固件，详见 Job Summary"
+            echo "$MISSING" > /builder/missing_devices.txt
+          fi
+        fi
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -177,10 +310,10 @@ jobs:
         name: ${{ github.event.inputs.device }}-openwrt-${{ env.build_date }}
         path: ${{ env.build_dir }}/rom/*
 
-    # 标签 = 机型-日期（如 netcore-n60-pro-2026-11-03）：
-    # - 每次运行各成一个 Release，不再共用 "main" 一个标签
-    # - allowUpdates: 同日重跑同机型时补传，不建重复
-    # - replacesArtifacts: false + 不删除 → 历史版本与既有资产全部保留
+    # 标签 = 机型-日期（如 all-mt7981-devices-2026-11-03）：
+    # - 每个机型每天一个独立 Release，不再共用 main 或 openwrt-xxx 一个标签
+    # - allowUpdates: 同日重跑同机型补传，不建重复
+    # - replacesArtifacts: false → 历史版本与既有资产全部保留
     - name: Create release
       continue-on-error: true
       uses: ncipollo/release-action@v1
@@ -198,3 +331,7 @@ jobs:
           - LAN 地址：${{ github.event.inputs.lan_addr }}
           - root 密码：${{ github.event.inputs.root_password }}
           - 编译时间：${{ env.build_date }} (UTC+8)
+          - 源码：padavanonly/immortalwrt-mt798x-6.6 (openwrt-24.10-6.6)
+
+          > 机型清单由源码 `target/linux/mediatek/image/filogic.mk` 实时生成，
+          > 未产出的机型会在 Actions 的 Job Summary 中列出。
