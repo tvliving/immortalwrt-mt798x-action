@@ -20,7 +20,7 @@ function git_sparse_clone() {
 # Go 1.25
 git clone --depth=1 https://$github/sbwml/packages_lang_golang feeds/packages/lang/golang
 
-# OpenList 
+# OpenList
 git clone --depth=1 https://$github/sbwml/luci-app-openlist2 package/openlist
 
 # Mosdns
@@ -43,8 +43,11 @@ git clone --depth=1 https://$github/gdy666/luci-app-lucky package/luci-app-lucky
 # OpenAppFilter
 git clone --depth=1 https://$github/destan19/OpenAppFilter.git package/OpenAppFilter
 
-# Argon 主题
-git clone --depth=1 https://$github/QuickWrt/luci-theme-argon package/luci-theme-argon
+# Argon 主题（QuickWrt/luci-theme-argon 已 404，自动回退到 jerrykuku 官方仓库）
+if ! git clone --depth=1 https://$github/QuickWrt/luci-theme-argon package/luci-theme-argon 2>/dev/null; then
+    echo "::warning::QuickWrt/luci-theme-argon 已不存在，改用 jerrykuku/luci-theme-argon (master 分支)"
+    git clone --depth=1 -b master https://$github/jerrykuku/luci-theme-argon package/luci-theme-argon
+fi
 
 # luci-app-bandix
 git clone https://$github/timsaya/luci-app-bandix package/new/luci-app-bandix
