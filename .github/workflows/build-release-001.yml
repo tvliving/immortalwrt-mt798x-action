@@ -49,9 +49,9 @@ on:
         default: 'ZeroWrt'
         type: string
       wifi_password:
-        description: '🔑 设置默认 WIFI 密码（可选，默认1234567890）'
+        description: '🔑 设置默认 WIFI 密码（可选）'
         required: false
-        default: '1234567890'
+        default: ''
         type: string
       root_password:
         description: '🔐 设置默认 root 密码（可选，默认password）'
@@ -85,6 +85,8 @@ jobs:
         git config --global user.name 'actions'
         git config --global user.email 'action@github.com'
         echo build_dir="/builder" >> "$GITHUB_ENV"
+        # 发布标签：机型-日期（每天每机型一个 Release，历史全保留）
+        echo "build_date=$(TZ=Asia/Shanghai date +%Y-%m-%d)" >> "$GITHUB_ENV"
 
     - name: Show system
       run: |
@@ -142,8 +144,7 @@ jobs:
         fi
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ github.event.inputs.device }}
         cd openwrt
-        tags=$(git branch --show-current)
-        echo "latest_release=$tags" >>$GITHUB_ENV
+        echo "latest_release=${{ github.event.inputs.device }}-${{ env.build_date }}" >> $GITHUB_ENV
 
     - name: Extensive logs after a failed compilation
       working-directory: /builder
@@ -173,17 +174,27 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
+        name: ${{ github.event.inputs.device }}-openwrt-${{ env.build_date }}
         path: ${{ env.build_dir }}/rom/*
 
+    # 标签 = 机型-日期（如 netcore-n60-pro-2026-11-03）：
+    # - 每次运行各成一个 Release，不再共用 "main" 一个标签
+    # - allowUpdates: 同日重跑同机型时补传，不建重复
+    # - replacesArtifacts: false + 不删除 → 历史版本与既有资产全部保留
     - name: Create release
       continue-on-error: true
       uses: ncipollo/release-action@v1
       with:
-        name: ${{ env.latest_release }}
+        name: ZeroWrt ${{ github.event.inputs.device }} (${{ env.build_date }})
         allowUpdates: true
         tag: ${{ env.latest_release }}
         commit: main
-        replacesArtifacts: true
+        replacesArtifacts: false
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
+        body: |
+          ### 固件信息
+          - 机型：${{ github.event.inputs.device }}
+          - LAN 地址：${{ github.event.inputs.lan_addr }}
+          - root 密码：${{ github.event.inputs.root_password }}
+          - 编译时间：${{ env.build_date }} (UTC+8)
