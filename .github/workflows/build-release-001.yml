@@ -1,15 +1,12 @@
 name: 💻 固件编译
 
-# 新增：定时触发（北京时间凌晨2点） + 保留手动触发
 on:
-  schedule:
-    - cron: '0 18 * * *'  # UTC时间18点 = 北京时间凌晨2点（UTC+8）
   workflow_dispatch:
     inputs:
       device:
         description: '➡️ 选择需构建固件的设备型号'
         required: true
-        default: 'all-mt7981-devices'
+        default: 'netcore-n60-pro'
         type: choice
         options:
           - 'abt-asr3000'
@@ -19,8 +16,8 @@ on:
           - 'cmcc-rax3000m'
           - 'cmcc-rax3000me'
           - 'cmcc-xr30'
-          - 'cmcc-xr30-emmc'          
-          - 'umi-uax3000e'          
+          - 'cmcc-xr30-emmc'
+          - 'umi-uax3000e'
           - 'h3c-magic-nx30-pro'
           - 'imou-lc-hx3001'
           - 'nokia-ea0326gmp'
@@ -29,7 +26,7 @@ on:
           - 'qihoo-360t7'
           - 'sl-3000'
           - 'sl-3000-emmc'
-          - 'xiaomi-mi-router-ax3000t'         
+          - 'xiaomi-mi-router-ax3000t'
           - 'clx-s20p'
           - 'ikuai-q6000'
           - 'ikuai-q6000-emmc'
@@ -50,7 +47,12 @@ on:
         description: '🛜 设置默认 WIFI 名称（可选，默认ZeroWrt）'
         required: false
         default: 'ZeroWrt'
-        type: string        
+        type: string
+      wifi_password:
+        description: '🔑 设置默认 WIFI 密码（可选，默认1234567890）'
+        required: false
+        default: '1234567890'
+        type: string
       root_password:
         description: '🔐 设置默认 root 密码（可选，默认password）'
         required: false
@@ -64,8 +66,7 @@ on:
 
 jobs:
   build:
-    # 适配定时构建：手动触发显示选择的设备，定时触发显示默认设备
-    name: Build ${{ github.event.inputs.device || 'netcore-n60-pro' }}
+    name: Build ${{ github.event.inputs.device }}
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -84,14 +85,6 @@ jobs:
         git config --global user.name 'actions'
         git config --global user.email 'action@github.com'
         echo build_dir="/builder" >> "$GITHUB_ENV"
-        # 新增1：定义定时构建的默认参数（不影响手动触发）
-        echo "DEFAULT_DEVICE=netcore-n60-pro" >> "$GITHUB_ENV"
-        echo "DEFAULT_LAN=10.0.0.1" >> "$GITHUB_ENV"
-        echo "DEFAULT_WIFI=ZeroWrt" >> "$GITHUB_ENV"
-        echo "DEFAULT_PW=password" >> "$GITHUB_ENV"
-        echo "DEFAULT_OPTIONS=BUILD_FAST=y ENABLE_BPF=y" >> "$GITHUB_ENV"
-        # 新增2：生成日期（格式：25.12.24），用于标签拼接
-        echo "BUILD_DATE=$(date +'%y.%m.%d')" >> "$GITHUB_ENV"
 
     - name: Show system
       run: |
@@ -107,18 +100,16 @@ jobs:
         uname -a
         echo
 
-    # 完全保留你原有的 Caddy Server 代码，未做任何修改
     - name: Install Caddy Server
       run: |
         echo "📥 下载 Caddy v2.10.2..."
         sudo curl -sL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz
         echo "📦 解压并安装..."
         sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        sudo tar -xzf caddy.tar.gz -C /usr/bin caddy
-        
-        echo "🧹 清理临时文件..."      
+
+        echo "🧹 清理临时文件..."
         rm caddy.tar.gz
-        
+
         echo "✅ 验证安装..."
         /usr/bin/caddy version
 
@@ -145,24 +136,14 @@ jobs:
       id: compile
       continue-on-error: true
       run: |
-        # 新增3：适配定时/手动构建的参数传递（兜底默认值）
-        DEVICE="${{ github.event.inputs.device || env.DEFAULT_DEVICE }}"
-        BUILD_OPT="${{ github.event.inputs.build_options || env.DEFAULT_OPTIONS }}"
-        LAN="${{ github.event.inputs.lan_addr || env.DEFAULT_LAN }}"
-        WIFI_NAME="${{ github.event.inputs.wifi_name || env.DEFAULT_WIFI }}"
-        ROOT_PASSWORD="${{ github.event.inputs.root_password || env.DEFAULT_PW }}"
-        
-        # 保留你原有的参数导出逻辑，仅替换为上面的兼容变量
-        export $BUILD_OPT LAN=$LAN WIFI_NAME=$WIFI_NAME
-        [ -n "$ROOT_PASSWORD" ] && export ROOT_PASSWORD="$ROOT_PASSWORD"
-        
-        # 执行编译脚本（保留原有逻辑）
-        bash <(curl -sS http://127.0.0.1:8080/build.sh) $DEVICE
+        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} WIFI_NAME=${{ github.event.inputs.wifi_name }} WIFI_PASSWORD=${{ github.event.inputs.wifi_password }}
+        if [ -n "${{ github.event.inputs.root_password }}" ]; then
+          export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
+        fi
+        bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ github.event.inputs.device }}
         cd openwrt
         tags=$(git branch --show-current)
-        # 新增4：拼接带日期的标签（格式：openwrt-24.10-6.6-25.12.24）
-        final_tag="openwrt-${tags}-${{ env.BUILD_DATE }}"
-        echo "latest_release=$final_tag" >>$GITHUB_ENV
+        echo "latest_release=$tags" >>$GITHUB_ENV
 
     - name: Extensive logs after a failed compilation
       working-directory: /builder
@@ -170,37 +151,35 @@ jobs:
       run: |
         cd openwrt
         make V=s
-        
+
     - name: Prepare Firmware Files
       working-directory: /builder
       run: |
         mkdir -p rom
-        
+
         # 自动查找并复制所有 sysupgrade 固件
         find openwrt/bin/targets -name "*sysupgrade.bin" -type f -exec cp -v {} rom/ \;
-        
+
         # 验证
         if [ ! -f rom/*-sysupgrade.bin ]; then
           echo "❌ 固件复制失败，实际文件结构："
           find openwrt/bin -type f -name "*.bin"
           exit 1
         fi
-        
+
         echo "✅ 成功复制固件："
         ls -lh rom/
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        # 适配：artifact名称带日期和设备
-        name: ${{ github.event.inputs.device || env.DEFAULT_DEVICE }}-${{ env.latest_release }}
+        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
         path: ${{ env.build_dir }}/rom/*
 
     - name: Create release
       continue-on-error: true
       uses: ncipollo/release-action@v1
       with:
-        # 新增5：发布名称和标签都带日期（如openwrt-24.10-6.6-25.12.24）
         name: ${{ env.latest_release }}
         allowUpdates: true
         tag: ${{ env.latest_release }}
